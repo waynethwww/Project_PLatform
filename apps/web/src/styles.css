@@ -384,6 +384,14 @@ textarea {
   height: 260px;
 }
 
+.wr-chart--ring-compact {
+  height: 212px;
+}
+
+.wr-chart--ring-wide {
+  height: 272px;
+}
+
 .wr-note {
   margin-top: 8px;
   padding: 7px 11px;
@@ -410,11 +418,24 @@ textarea {
   background: #e2f5ec;
 }
 
+.wr-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .wr-table,
 .wr-risk-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 11.5px;
+}
+
+.wr-table {
+  min-width: 760px;
+}
+
+.wr-risk-table {
+  min-width: 920px;
 }
 
 .wr-table th {
@@ -1583,6 +1604,14 @@ td {
   .wr-summary-grid,
   .wr-pm-grid {
     grid-template-columns: 1fr;
+  }
+
+  .wr-chart--ring-compact {
+    height: 228px;
+  }
+
+  .wr-chart--ring-wide {
+    height: 300px;
   }
 
   .hero,

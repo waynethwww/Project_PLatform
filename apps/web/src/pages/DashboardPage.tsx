@@ -214,6 +214,43 @@ function compactProjectName(name: string, max = 12) {
   return `${name.slice(0, max)}…`;
 }
 
+type PieDatum = {
+  value: number;
+  name: string;
+  itemStyle: {
+    color: string;
+  };
+};
+
+function buildBottomLegend(fontSize = 10) {
+  return {
+    type: 'scroll' as const,
+    bottom: 0,
+    left: 'center' as const,
+    icon: 'circle',
+    itemWidth: 10,
+    itemHeight: 10,
+    itemGap: 16,
+    pageIconColor: COLOR.blue,
+    pageIconInactiveColor: '#BCC4DF',
+    pageTextStyle: { color: '#6868A0', fontSize: 10 },
+    textStyle: { color: '#38385E', fontSize },
+  };
+}
+
+function buildRingSeries(data: PieDatum[], radius: [string, string] = ['55%', '78%']) {
+  return {
+    type: 'pie' as const,
+    radius,
+    center: ['50%', '42%'] as [string, string],
+    avoidLabelOverlap: false,
+    label: { show: false },
+    labelLine: { show: false },
+    emphasis: { scale: true, scaleSize: 4 },
+    data,
+  };
+}
+
 export function DashboardPage() {
   const [filters, setFilters] = useState<DashboardFilters>({
     startDate: daysAgo(30),
@@ -686,24 +723,14 @@ export function DashboardPage() {
 
   const c1HealthOption = useMemo(
     () => ({
-      tooltip: { trigger: 'item' },
-      legend: {
-        bottom: 0,
-        textStyle: { color: '#38385E', fontSize: 11 },
-      },
+      tooltip: { trigger: 'item', confine: true },
+      legend: buildBottomLegend(11),
       series: [
-        {
-          type: 'pie',
-          radius: ['55%', '78%'],
-          avoidLabelOverlap: true,
-          label: { color: '#38385E', fontSize: 11 },
-          labelLine: { lineStyle: { color: '#999' } },
-          data: [
-            { value: curve1HealthCounts.healthy, name: '● 健康', itemStyle: { color: 'rgba(20,88,58,.82)' } },
-            { value: curve1HealthCounts.risky, name: '🔴 红色风险', itemStyle: { color: 'rgba(154,32,32,.82)' } },
-            { value: curve1HealthCounts.warn, name: '🟡 黄色预警', itemStyle: { color: 'rgba(154,84,0,.82)' } },
-          ],
-        },
+        buildRingSeries([
+          { value: curve1HealthCounts.healthy, name: '健康', itemStyle: { color: 'rgba(20,88,58,.82)' } },
+          { value: curve1HealthCounts.risky, name: '红色风险', itemStyle: { color: 'rgba(154,32,32,.82)' } },
+          { value: curve1HealthCounts.warn, name: '黄色预警', itemStyle: { color: 'rgba(154,84,0,.82)' } },
+        ]),
       ],
     }),
     [curve1HealthCounts.healthy, curve1HealthCounts.risky, curve1HealthCounts.warn],
@@ -744,20 +771,11 @@ export function DashboardPage() {
 
   const annotationContractOption = useMemo(
     () => ({
-      tooltip: { trigger: 'item', formatter: '{b}: {c}万 ({d}%)' },
-      legend: {
-        bottom: 0,
-        textStyle: { color: '#38385E', fontSize: 10 },
-      },
+      tooltip: { trigger: 'item', formatter: '{b}: {c}万 ({d}%)', confine: true },
+      legend: buildBottomLegend(10),
       series: [
-        {
-          type: 'pie',
-          radius: ['55%', '78%'],
-          label: {
-            formatter: '{b|{b}}\n{d}%',
-            rich: { b: { fontSize: 10, color: '#38385E' } },
-          },
-          data: annotationContractRows.map((row, index) => ({
+        buildRingSeries(
+          annotationContractRows.map((row, index) => ({
             value: Number(row.value.toFixed(1)),
             name: row.name,
             itemStyle: {
@@ -772,7 +790,8 @@ export function DashboardPage() {
               ][index % 7],
             },
           })),
-        },
+          ['52%', '74%'],
+        ),
       ],
     }),
     [annotationContractRows],
@@ -780,20 +799,11 @@ export function DashboardPage() {
 
   const annotationWeeklyOption = useMemo(
     () => ({
-      tooltip: { trigger: 'item', formatter: '{b}: {c}万 ({d}%)' },
-      legend: {
-        bottom: 0,
-        textStyle: { color: '#38385E', fontSize: 10 },
-      },
+      tooltip: { trigger: 'item', formatter: '{b}: {c}万 ({d}%)', confine: true },
+      legend: buildBottomLegend(10),
       series: [
-        {
-          type: 'pie',
-          radius: ['55%', '78%'],
-          label: {
-            formatter: '{b|{b}}\n{d}%',
-            rich: { b: { fontSize: 10, color: '#38385E' } },
-          },
-          data: annotationWeeklyRows.map((row, index) => ({
+        buildRingSeries(
+          annotationWeeklyRows.map((row, index) => ({
             value: Number(row.value.toFixed(1)),
             name: row.name,
             itemStyle: {
@@ -806,7 +816,8 @@ export function DashboardPage() {
               ][index % 5],
             },
           })),
-        },
+          ['52%', '74%'],
+        ),
       ],
     }),
     [annotationWeeklyRows],
@@ -988,16 +999,11 @@ export function DashboardPage() {
 
   const pmWeeklyShareOption = useMemo(
     () => ({
-      tooltip: { trigger: 'item', formatter: '{b}: {c}万 ({d}%)' },
-      legend: {
-        bottom: 0,
-        textStyle: { color: '#38385E', fontSize: 10 },
-      },
+      tooltip: { trigger: 'item', formatter: '{b}: {c}万 ({d}%)', confine: true },
+      legend: buildBottomLegend(10),
       series: [
-        {
-          type: 'pie',
-          radius: '76%',
-          data: pmLoadRows.map((row, index) => ({
+        buildRingSeries(
+          pmLoadRows.map((row, index) => ({
             value: Number(row.weeklyDelivery.toFixed(3)),
             name: row.pmName,
             itemStyle: {
@@ -1010,7 +1016,8 @@ export function DashboardPage() {
               ][index % 5],
             },
           })),
-        },
+          ['42%', '70%'],
+        ),
       ],
     }),
     [pmLoadRows],
@@ -1204,7 +1211,7 @@ export function DashboardPage() {
           <div className="wr-grid wr-grid--2">
             <div>
               <div className="wr-chart-title wr-chart-title--teal">一曲线健康度分布（按最新快照）</div>
-              <div className="wr-chart wr-chart--180">
+              <div className="wr-chart wr-chart--ring-compact">
                 <ReactECharts option={c1HealthOption} style={{ height: '100%' }} />
               </div>
             </div>
@@ -1229,13 +1236,13 @@ export function DashboardPage() {
           <div className="wr-grid wr-grid--2 wr-grid--center">
             <div>
               <div className="wr-chart-title wr-chart-title--blue">合同金额占比（万元）</div>
-              <div className="wr-chart wr-chart--240">
+              <div className="wr-chart wr-chart--ring-wide">
                 <ReactECharts option={annotationContractOption} style={{ height: '100%' }} />
               </div>
             </div>
             <div>
               <div className="wr-chart-title wr-chart-title--blue">本周交付金额占比（万元）</div>
-              <div className="wr-chart wr-chart--240">
+              <div className="wr-chart wr-chart--ring-wide">
                 <ReactECharts option={annotationWeeklyOption} style={{ height: '100%' }} />
               </div>
               <div className="wr-note wr-note--amber">
@@ -1269,56 +1276,58 @@ export function DashboardPage() {
             </div>
             <div>
               <div className="wr-chart-title wr-chart-title--purple">本期算法效果详情</div>
-              <table className="wr-table">
-                <thead>
-                  <tr>
-                    <th>标注类型</th>
-                    <th>批次日期</th>
-                    <th>算法版本</th>
-                    <th>修正率%</th>
-                    <th>本期样本量</th>
-                    <th>提效%</th>
-                    <th>优化优先级</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {algoRows.map((row) => (
-                    <tr key={`${row.projectId}-${row.weekStart}`}>
-                      <td className="wr-table__project">{row.annotationType}</td>
-                      <td>{row.weekStart}</td>
-                      <td>{row.algoVersion || '—'}</td>
-                      <td>
-                        <b
-                          style={{
-                            color: row.modificationRate > 15 ? COLOR.red : COLOR.teal,
-                          }}
-                        >
-                          {percentFromRaw(row.modificationRate)}
-                        </b>
-                      </td>
-                      <td>{row.actualQty.toLocaleString('zh-CN')}</td>
-                      <td>{percentFromRaw(row.timeSavePct)}</td>
-                      <td>
-                        <span
-                          className={
-                            row.modificationRate > 30
-                              ? 'wr-tag wr-tag--red'
-                              : row.modificationRate > 15
-                                ? 'wr-tag wr-tag--amber'
-                                : 'wr-tag wr-tag--blue'
-                          }
-                        >
-                          {row.modificationRate > 30
-                            ? 'P0 重点优化'
-                            : row.modificationRate > 15
-                              ? 'P1 优先优化'
-                              : 'P2 持续跟踪'}
-                        </span>
-                      </td>
+              <div className="wr-table-wrap">
+                <table className="wr-table">
+                  <thead>
+                    <tr>
+                      <th>标注类型</th>
+                      <th>批次日期</th>
+                      <th>算法版本</th>
+                      <th>修正率%</th>
+                      <th>本期样本量</th>
+                      <th>提效%</th>
+                      <th>优化优先级</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {algoRows.map((row) => (
+                      <tr key={`${row.projectId}-${row.weekStart}`}>
+                        <td className="wr-table__project">{row.annotationType}</td>
+                        <td>{row.weekStart}</td>
+                        <td>{row.algoVersion || '—'}</td>
+                        <td>
+                          <b
+                            style={{
+                              color: row.modificationRate > 15 ? COLOR.red : COLOR.teal,
+                            }}
+                          >
+                            {percentFromRaw(row.modificationRate)}
+                          </b>
+                        </td>
+                        <td>{row.actualQty.toLocaleString('zh-CN')}</td>
+                        <td>{percentFromRaw(row.timeSavePct)}</td>
+                        <td>
+                          <span
+                            className={
+                              row.modificationRate > 30
+                                ? 'wr-tag wr-tag--red'
+                                : row.modificationRate > 15
+                                  ? 'wr-tag wr-tag--amber'
+                                  : 'wr-tag wr-tag--blue'
+                            }
+                          >
+                            {row.modificationRate > 30
+                              ? 'P0 重点优化'
+                              : row.modificationRate > 15
+                                ? 'P1 优先优化'
+                                : 'P2 持续跟踪'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
           <div className="wr-note" style={{ background: '#F3E5F5', borderLeftColor: COLOR.purple }}>
@@ -1345,51 +1354,53 @@ export function DashboardPage() {
           </div>
 
           <div className="wr-chart-title wr-chart-title--navy wr-chart-title--mt">一曲线成本分析明细</div>
-          <table className="wr-table">
-            <thead>
-              <tr>
-                <th>项目名称</th>
-                <th>PM</th>
-                <th>进度%</th>
-                <th>本周交付金额(万)</th>
-                <th>累计交付金额(万)</th>
-                <th>成本偏差(万)</th>
-                <th>偏差率</th>
-                <th>综合健康度</th>
-                <th>成本状态</th>
-              </tr>
-            </thead>
-            <tbody>
-              {curve1CostRows.map((row) => {
-                const tag = healthTag(row.report.riskLevel);
-                return (
-                  <tr key={row.report.projectId}>
-                    <td className="wr-table__project">{row.report.projectName}</td>
-                    <td>{row.report.pmName}</td>
-                    <td>{percentFromUnit(progressUnit(row.report.progressPct))}</td>
-                    <td className="wr-money">{money(row.report.weeklyDeliveryAmount)}</td>
-                    <td className="wr-money">{money(row.report.amountDelivered)}</td>
-                    <td className={row.deviation > 0 ? 'wr-over' : row.deviation < 0 ? 'wr-save' : 'wr-ok'}>
-                      {row.deviation > 0 ? '+' : ''}
-                      {money(row.deviation)}
-                    </td>
-                    <td className={row.deviationRate > 0 ? 'wr-over' : row.deviationRate < 0 ? 'wr-save' : 'wr-ok'}>
-                      {row.deviationRate > 0 ? '+' : ''}
-                      {percentFromUnit(row.deviationRate)}
-                    </td>
-                    <td>
-                      <span className={tag.className}>{tag.text}</span>
-                    </td>
-                    <td>
-                      <span className={row.deviation > 0 ? 'wr-tag wr-tag--red' : 'wr-tag wr-tag--green'}>
-                        {row.deviation > 0 ? '超支' : '未超支'}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <div className="wr-table-wrap">
+            <table className="wr-table">
+              <thead>
+                <tr>
+                  <th>项目名称</th>
+                  <th>PM</th>
+                  <th>进度%</th>
+                  <th>本周交付金额(万)</th>
+                  <th>累计交付金额(万)</th>
+                  <th>成本偏差(万)</th>
+                  <th>偏差率</th>
+                  <th>综合健康度</th>
+                  <th>成本状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                {curve1CostRows.map((row) => {
+                  const tag = healthTag(row.report.riskLevel);
+                  return (
+                    <tr key={row.report.projectId}>
+                      <td className="wr-table__project">{row.report.projectName}</td>
+                      <td>{row.report.pmName}</td>
+                      <td>{percentFromUnit(progressUnit(row.report.progressPct))}</td>
+                      <td className="wr-money">{money(row.report.weeklyDeliveryAmount)}</td>
+                      <td className="wr-money">{money(row.report.amountDelivered)}</td>
+                      <td className={row.deviation > 0 ? 'wr-over' : row.deviation < 0 ? 'wr-save' : 'wr-ok'}>
+                        {row.deviation > 0 ? '+' : ''}
+                        {money(row.deviation)}
+                      </td>
+                      <td className={row.deviationRate > 0 ? 'wr-over' : row.deviationRate < 0 ? 'wr-save' : 'wr-ok'}>
+                        {row.deviationRate > 0 ? '+' : ''}
+                        {percentFromUnit(row.deviationRate)}
+                      </td>
+                      <td>
+                        <span className={tag.className}>{tag.text}</span>
+                      </td>
+                      <td>
+                        <span className={row.deviation > 0 ? 'wr-tag wr-tag--red' : 'wr-tag wr-tag--green'}>
+                          {row.deviation > 0 ? '超支' : '未超支'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
           <div className="wr-note wr-note--amber">
             ⚠ 判定规则：当前先按“实际成本 vs 应耗预算”计算偏差；项目未开始时默认记为“未超支”。
           </div>
@@ -1397,7 +1408,8 @@ export function DashboardPage() {
           <div className="wr-chart-title wr-chart-title--indigo wr-chart-title--mt">
             二/三曲线执行明细（预算进度口径）
           </div>
-          <table className="wr-table">
+          <div className="wr-table-wrap">
+            <table className="wr-table">
             <thead>
               <tr>
                 <th>项目名称</th>
@@ -1443,7 +1455,8 @@ export function DashboardPage() {
                 );
               })}
             </tbody>
-          </table>
+            </table>
+          </div>
           <div className="wr-note wr-note--amber">
             当前系统尚未恢复人天明细字段，本期先按预算进度口径显示二/三曲线执行情况。
           </div>
@@ -1484,7 +1497,8 @@ export function DashboardPage() {
           </div>
 
           <div className="wr-chart-title wr-chart-title--amber wr-chart-title--mt">一曲线项目质量明细表</div>
-          <table className="wr-table">
+          <div className="wr-table-wrap">
+            <table className="wr-table">
             <thead>
               <tr>
                 <th>项目名称</th>
@@ -1544,7 +1558,8 @@ export function DashboardPage() {
                 );
               })}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -1554,7 +1569,8 @@ export function DashboardPage() {
           <span className="wr-badge wr-badge--warn">另有低风险 {lowRiskCount} 条，未纳入预警主表</span>
         </div>
         <div className="wr-sec__body">
-          <table className="wr-risk-table">
+          <div className="wr-table-wrap">
+            <table className="wr-risk-table">
             <thead>
               <tr>
                 <th>风险级别</th>
@@ -1583,7 +1599,8 @@ export function DashboardPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -1616,7 +1633,7 @@ export function DashboardPage() {
           <div className="wr-grid wr-grid--2">
             <div>
               <div className="wr-chart-title wr-chart-title--pm">一曲线项目经理本周交付金额占比</div>
-              <div className="wr-chart wr-chart--210">
+              <div className="wr-chart wr-chart--ring-compact">
                 <ReactECharts option={pmWeeklyShareOption} style={{ height: '100%' }} />
               </div>
               <div className="wr-note wr-note--green">
@@ -1632,7 +1649,8 @@ export function DashboardPage() {
           </div>
 
           <div className="wr-chart-title wr-chart-title--pm wr-chart-title--mt">本周一曲线 PM交付金额统计</div>
-          <table className="wr-table">
+          <div className="wr-table-wrap">
+            <table className="wr-table">
             <thead>
               <tr>
                 <th>PM姓名</th>
@@ -1657,7 +1675,8 @@ export function DashboardPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
 
           <div className="wr-pm-grid">
             {pmCards.map((card) => (
