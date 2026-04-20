@@ -7,9 +7,10 @@
     "apps/web"
   ],
   "scripts": {
-    "dev:api": "npm run start:dev --workspace apps/api",
-    "dev:web": "npm run dev --workspace apps/web",
-    "build": "npm run build --workspace apps/api && npm run build --workspace apps/web"
+    "dev:api": "PATH=/opt/homebrew/bin:$PATH npm --prefix apps/api run start:dev",
+    "dev:web": "PATH=/opt/homebrew/bin:$PATH npm --prefix apps/web run dev",
+    "build:api": "PATH=/opt/homebrew/bin:$PATH npm --prefix apps/api run build",
+    "build:web": "PATH=/opt/homebrew/bin:$PATH npm --prefix apps/web run build",
+    "build": "PATH=/opt/homebrew/bin:$PATH npm --prefix apps/api run build && PATH=/opt/homebrew/bin:$PATH npm --prefix apps/web run build"
   }
 }
-

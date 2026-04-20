@@ -12,7 +12,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./infra/sql/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql
+      - ./infra/sql:/docker-entrypoint-initdb.d
 
   api:
     build:
@@ -42,4 +42,3 @@ services:
 
 volumes:
   postgres_data:
-

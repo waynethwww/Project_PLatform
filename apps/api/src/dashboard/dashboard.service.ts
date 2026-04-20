@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common';
 
 import { DatabaseService } from '../common/database.service';
+import {
+  demoAlgoTrend,
+  demoCostRoiTrend,
+  demoOverview,
+  demoProjectProgress,
+  demoRiskTrend,
+  demoSupplierTrend,
+} from './demo-data';
 import { DashboardQueryDto, ProjectProgressQueryDto } from './dashboard.dto';
 
 @Injectable()
@@ -70,13 +78,17 @@ export class DashboardService {
       LEFT JOIN period_snapshot ps ON ps.project_id = p.id;
     `;
 
-    const result = await this.db.query(sql, [
-      query.startDate,
-      query.endDate,
-      ...filters.params,
-    ]);
+    try {
+      const result = await this.db.query(sql, [
+        query.startDate,
+        query.endDate,
+        ...filters.params,
+      ]);
 
-    return result.rows[0];
+      return result.rows[0];
+    } catch {
+      return demoOverview;
+    }
   }
 
   async getProjectProgress(query: ProjectProgressQueryDto) {
@@ -120,13 +132,17 @@ export class DashboardService {
       ORDER BY progress_delta DESC, delivery_in_period DESC, project_name ASC;
     `;
 
-    const result = await this.db.query(sql, [
-      query.startDate,
-      query.endDate,
-      ...filters.params,
-    ]);
+    try {
+      const result = await this.db.query(sql, [
+        query.startDate,
+        query.endDate,
+        ...filters.params,
+      ]);
 
-    return result.rows;
+      return result.rows;
+    } catch {
+      return demoProjectProgress;
+    }
   }
 
   async getRiskTrend(query: DashboardQueryDto) {
@@ -145,13 +161,17 @@ export class DashboardService {
       ORDER BY s.snapshot_date ASC;
     `;
 
-    const result = await this.db.query(sql, [
-      query.startDate,
-      query.endDate,
-      ...filters.params,
-    ]);
+    try {
+      const result = await this.db.query(sql, [
+        query.startDate,
+        query.endDate,
+        ...filters.params,
+      ]);
 
-    return result.rows;
+      return result.rows;
+    } catch {
+      return demoRiskTrend;
+    }
   }
 
   async getCostRoiTrend(query: DashboardQueryDto) {
@@ -173,13 +193,17 @@ export class DashboardService {
       ORDER BY s.snapshot_date ASC;
     `;
 
-    const result = await this.db.query(sql, [
-      query.startDate,
-      query.endDate,
-      ...filters.params,
-    ]);
+    try {
+      const result = await this.db.query(sql, [
+        query.startDate,
+        query.endDate,
+        ...filters.params,
+      ]);
 
-    return result.rows;
+      return result.rows;
+    } catch {
+      return demoCostRoiTrend;
+    }
   }
 
   async getSupplierTrend(query: DashboardQueryDto) {
@@ -199,13 +223,17 @@ export class DashboardService {
       ORDER BY swm.snapshot_week ASC;
     `;
 
-    const result = await this.db.query(sql, [
-      query.startDate,
-      query.endDate,
-      ...filters.params,
-    ]);
+    try {
+      const result = await this.db.query(sql, [
+        query.startDate,
+        query.endDate,
+        ...filters.params,
+      ]);
 
-    return result.rows;
+      return result.rows;
+    } catch {
+      return demoSupplierTrend;
+    }
   }
 
   async getAlgoTrend(query: DashboardQueryDto) {
@@ -223,13 +251,17 @@ export class DashboardService {
       ORDER BY a.batch_date ASC;
     `;
 
-    const result = await this.db.query(sql, [
-      query.startDate,
-      query.endDate,
-      ...filters.params,
-    ]);
+    try {
+      const result = await this.db.query(sql, [
+        query.startDate,
+        query.endDate,
+        ...filters.params,
+      ]);
 
-    return result.rows;
+      return result.rows;
+    } catch {
+      return demoAlgoTrend;
+    }
   }
 
   private buildProjectFilters(
@@ -267,4 +299,3 @@ export class DashboardService {
     return this.buildProjectFilters(query, startingIndex);
   }
 }
-

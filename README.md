@@ -24,12 +24,14 @@ infra/sql PostgreSQL 建表 SQL
 1. 安装 Node.js 20+
 2. 在 `apps/api/.env.example` 和 `apps/web/.env.example` 基础上创建环境变量
 3. 初始化数据库并执行 `infra/sql/001_schema.sql`
-4. 启动服务
+4. 如需本地演示效果，可一并加载 `infra/sql/002_seed_demo.sql`
+5. 启动服务
 
 ```bash
-npm install
-npm run dev:api
-npm run dev:web
+/usr/bin/env bash -lc "docker compose up -d postgres"
+/opt/homebrew/bin/npm install
+/opt/homebrew/bin/npm run dev:api
+/opt/homebrew/bin/npm run dev:web
 ```
 
 ## GitHub 仓库
@@ -39,4 +41,3 @@ git remote add origin git@github.com:waynethwww/Project_PLatform.git
 ```
 
 详细部署见 [docs/deployment.md](/Users/abc/Documents/Project_Platform/docs/deployment.md)。
-

@@ -51,13 +51,14 @@ docker compose up -d postgres
 数据库初始化脚本会自动执行：
 
 - [001_schema.sql](/Users/abc/Documents/Project_Platform/infra/sql/001_schema.sql)
+- [002_seed_demo.sql](/Users/abc/Documents/Project_Platform/infra/sql/002_seed_demo.sql)
 
 ### 2.3 安装依赖并启动
 
 ```bash
-npm install
-npm run dev:api
-npm run dev:web
+/opt/homebrew/bin/npm install
+/opt/homebrew/bin/npm run dev:api
+/opt/homebrew/bin/npm run dev:web
 ```
 
 访问：
@@ -175,4 +176,3 @@ VITE_DINGTALK_CORP_ID=dingxxxxxxxx
 3. 增加审批流与机器人回调处理
 4. 把 PM 填报端做成多步骤工作流表单
 5. 增加操作审计、字段级权限、导出中心
-
