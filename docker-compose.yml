@@ -1,0 +1,45 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: project_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/sql/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/project_platform
+      DINGTALK_APP_KEY: ${DINGTALK_APP_KEY}
+      DINGTALK_APP_SECRET: ${DINGTALK_APP_SECRET}
+      DINGTALK_AGENT_ID: ${DINGTALK_AGENT_ID}
+      DINGTALK_CORP_ID: ${DINGTALK_CORP_ID}
+      WEB_BASE_URL: http://localhost:5173
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+
