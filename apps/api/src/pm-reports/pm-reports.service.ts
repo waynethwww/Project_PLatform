@@ -1,10 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { dirname, join, sep } from 'path';
 import { randomUUID } from 'crypto';
 
 import { demoPmReportsStore } from './demo-reports';
-import { UpsertPmWeeklyReportDto } from './pm-reports.dto';
+import { UpsertPmWeeklyReportDto, UpsertProjectDto } from './pm-reports.dto';
 import {
   PmWeeklyReportRecord,
   PmWeeklyReportsStore,
@@ -30,6 +30,40 @@ export class PmReportsService {
   async listProjects() {
     const store = await this.readStore();
     return store.projects;
+  }
+
+  async createProject(payload: UpsertProjectDto) {
+    const store = await this.readStore();
+    if (store.projects.some((project) => project.id === payload.id)) {
+      throw new ConflictException(`Project ${payload.id} already exists`);
+    }
+
+    const project = this.buildProjectRecord(payload);
+    store.projects = this.sortProjects([project, ...store.projects]);
+    await this.writeStore(store);
+    return project;
+  }
+
+  async updateProject(id: string, payload: UpsertProjectDto) {
+    const store = await this.readStore();
+    const index = store.projects.findIndex((project) => project.id === id);
+    if (index < 0) {
+      throw new NotFoundException(`Project ${id} not found`);
+    }
+
+    const existing = store.projects[index];
+    const nextProject = this.buildProjectRecord({ ...payload, id });
+
+    store.projects[index] = nextProject;
+    store.projects = this.sortProjects(store.projects);
+    store.reports = store.reports.map((report) =>
+      report.projectId === id
+        ? this.syncReportWithProject(report, existing, nextProject)
+        : report,
+    );
+
+    await this.writeStore(store);
+    return nextProject;
   }
 
   async listReports(projectId?: string) {
@@ -139,6 +173,48 @@ export class PmReportsService {
     return reports
       .filter((item) => (projectId ? item.projectId === projectId : true))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  }
+
+  private buildProjectRecord(payload: UpsertProjectDto): ProjectOption {
+    return {
+      id: payload.id.trim(),
+      name: payload.name.trim(),
+      pmName: payload.pmName.trim(),
+      curveType: payload.curveType.trim(),
+      annotationType: payload.annotationType.trim(),
+      plannedQty: payload.plannedQty,
+      qtyUnit: payload.qtyUnit.trim(),
+      budgetTotal: payload.budgetTotal,
+      defaultSupplier: payload.defaultSupplier.trim(),
+    };
+  }
+
+  private sortProjects(projects: ProjectOption[]) {
+    return [...projects].sort((left, right) =>
+      left.name.localeCompare(right.name, 'zh-CN'),
+    );
+  }
+
+  private syncReportWithProject(
+    report: PmWeeklyReportRecord,
+    previousProject: ProjectOption,
+    nextProject: ProjectOption,
+  ): PmWeeklyReportRecord {
+    const shouldSyncSupplier =
+      !report.supplierName || report.supplierName === previousProject.defaultSupplier;
+
+    return {
+      ...report,
+      projectName: nextProject.name,
+      pmName: nextProject.pmName,
+      curveType: nextProject.curveType,
+      annotationType: nextProject.annotationType,
+      plannedQty: nextProject.plannedQty,
+      qtyUnit: nextProject.qtyUnit,
+      budgetTotal: nextProject.budgetTotal,
+      supplierName: shouldSyncSupplier ? nextProject.defaultSupplier : report.supplierName,
+      updatedAt: new Date().toISOString(),
+    };
   }
 
   private buildReportRecord(args: {

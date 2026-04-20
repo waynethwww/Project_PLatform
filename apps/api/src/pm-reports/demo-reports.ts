@@ -172,8 +172,8 @@ const demoPmReports: PmWeeklyReportRecord[] = [
     algoAdvice: '维持版本稳定，重点观察格式适配回归情况。',
     hoursSpent: 24,
     pmHourlyCost: 180,
-    pmComment: '下周需要把 Blocker 进一步拆细，保证里程碑稳定推进。',
-    nextWeekFocus: '1. 清理 Blocker 2. 联调回归 3. 输出老板可读摘要',
+    pmComment: '下周需要把阻塞事项进一步拆细，保证里程碑稳定推进。',
+    nextWeekFocus: '1. 清理阻塞事项 2. 联调回归 3. 输出老板可读摘要',
     status: 'draft',
     createdAt: '2026-04-18T06:10:00.000Z',
     updatedAt: '2026-04-20T02:00:00.000Z',
@@ -184,4 +184,3 @@ export const demoPmReportsStore: PmWeeklyReportsStore = {
   projects: demoPmProjects,
   reports: demoPmReports,
 };
-

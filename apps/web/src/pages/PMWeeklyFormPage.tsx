@@ -1,16 +1,19 @@
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 
 import {
+  createProject,
   createPmWeeklyReport,
   deletePmWeeklyReport,
   getPmWeeklyReportsBootstrap,
   PmWeeklyReport,
   PmWeeklyReportPayload,
   ProjectOption,
+  updateProject,
   updatePmWeeklyReport,
 } from '../lib/api';
 
 type FormState = PmWeeklyReportPayload;
+type ProjectEditorMode = 'create' | 'edit';
 
 const fallbackProject: ProjectOption = {
   id: 'temp-project',
@@ -23,6 +26,25 @@ const fallbackProject: ProjectOption = {
   budgetTotal: 0,
   defaultSupplier: '未配置',
 };
+
+function createEmptyProject(): ProjectOption {
+  const suffix = Date.now().toString().slice(-6);
+  return {
+    id: `P${suffix}`,
+    name: '',
+    pmName: '',
+    curveType: '一曲线',
+    annotationType: '',
+    plannedQty: 0,
+    qtyUnit: '项',
+    budgetTotal: 0,
+    defaultSupplier: '',
+  };
+}
+
+function cloneProject(project: ProjectOption): ProjectOption {
+  return { ...project };
+}
 
 function toDateInputValue(date: Date) {
   const year = date.getFullYear();
@@ -187,6 +209,10 @@ export function PMWeeklyFormPage() {
   const [draftStatus, setDraftStatus] = useState('正在加载本地填报数据...');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [projectMode, setProjectMode] = useState<ProjectEditorMode>('edit');
+  const [projectForm, setProjectForm] = useState<ProjectOption>(createEmptyProject());
+  const [projectStatus, setProjectStatus] = useState('可新增项目或调整当前项目经理');
+  const [isProjectSaving, setIsProjectSaving] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -206,10 +232,20 @@ export function PMWeeklyFormPage() {
           setActiveReportId(nextReports[0].id);
           setForm(reportToPayload(nextReports[0]));
           setDraftStatus(`已载入 ${nextReports[0].projectName} 的本地记录`);
+          const initialProject =
+            nextProjects.find((project) => project.id === nextReports[0].projectId) ||
+            nextProjects[0] ||
+            fallbackProject;
+          setProjectForm(cloneProject(initialProject));
+          setProjectMode('edit');
+          setProjectStatus(`已载入 ${initialProject.name} 主数据，可调整项目经理`);
         } else {
           const firstProject = nextProjects[0] || fallbackProject;
           setForm(createDefaultPayload(firstProject));
           setDraftStatus('当前没有填报记录，可创建首个周报草稿');
+          setProjectForm(cloneProject(firstProject));
+          setProjectMode('edit');
+          setProjectStatus('当前可新增项目，或先编辑当前项目主数据');
         }
       })
       .catch(() => {
@@ -220,6 +256,9 @@ export function PMWeeklyFormPage() {
         setProjects([fallbackProject]);
         setForm(createDefaultPayload(fallbackProject));
         setDraftStatus('加载失败，已进入离线草稿模式');
+        setProjectForm(cloneProject(fallbackProject));
+        setProjectMode('edit');
+        setProjectStatus('离线模式下仅可查看当前项目结构');
       })
       .finally(() => {
         if (mounted) {
@@ -449,6 +488,95 @@ export function PMWeeklyFormPage() {
     setActiveReportId(null);
     setForm(createDefaultPayload(selectedProject, form.weekStart || getWeekStart()));
     setDraftStatus(`已创建 ${selectedProject.name} 的新草稿，待保存`);
+  }
+
+  function beginCreateProject() {
+    setProjectMode('create');
+    setProjectForm(createEmptyProject());
+    setProjectStatus('新增项目模式：保存后即可在周填报中选择该项目');
+  }
+
+  function loadSelectedProjectIntoEditor() {
+    setProjectMode('edit');
+    setProjectForm(cloneProject(selectedProject));
+    setProjectStatus(`已载入 ${selectedProject.name}，可调整项目经理和基础信息`);
+  }
+
+  function updateProjectField<K extends keyof ProjectOption>(
+    key: K,
+    value: ProjectOption[K],
+  ) {
+    setProjectForm((current) => ({ ...current, [key]: value }));
+    setProjectStatus(projectMode === 'create' ? '新增项目待保存' : '项目主数据待保存');
+  }
+
+  async function saveProjectDefinition() {
+    if (!projectForm.id.trim() || !projectForm.name.trim() || !projectForm.pmName.trim()) {
+      setProjectStatus('请至少填写项目编号、项目名称、项目经理');
+      return;
+    }
+
+    setIsProjectSaving(true);
+    try {
+      if (projectMode === 'create') {
+        await createProject({
+          ...projectForm,
+          id: projectForm.id.trim(),
+          name: projectForm.name.trim(),
+          pmName: projectForm.pmName.trim(),
+          annotationType: projectForm.annotationType.trim(),
+          qtyUnit: projectForm.qtyUnit.trim(),
+          defaultSupplier: projectForm.defaultSupplier.trim(),
+        });
+      } else {
+        await updateProject(projectForm.id, {
+          ...projectForm,
+          id: projectForm.id.trim(),
+          name: projectForm.name.trim(),
+          pmName: projectForm.pmName.trim(),
+          annotationType: projectForm.annotationType.trim(),
+          qtyUnit: projectForm.qtyUnit.trim(),
+          defaultSupplier: projectForm.defaultSupplier.trim(),
+        });
+      }
+
+      const bootstrap = await getPmWeeklyReportsBootstrap();
+      setProjects(bootstrap.projects);
+      setReports(bootstrap.reports);
+
+      const syncedProject =
+        bootstrap.projects.find((project) => project.id === projectForm.id) ||
+        bootstrap.projects[0] ||
+        fallbackProject;
+
+      if (projectMode === 'create') {
+        setActiveReportId(null);
+        setForm(createDefaultPayload(syncedProject, form.weekStart || getWeekStart()));
+        setDraftStatus(`已新增项目 ${syncedProject.name}，可继续填写首个周报`);
+      } else {
+        const syncedActiveReport = activeReportId
+          ? bootstrap.reports.find((report) => report.id === activeReportId)
+          : null;
+
+        if (syncedActiveReport) {
+          setForm(reportToPayload(syncedActiveReport));
+        }
+
+        setDraftStatus(`已同步 ${syncedProject.name} 主数据变更`);
+      }
+
+      setProjectMode('edit');
+      setProjectForm(cloneProject(syncedProject));
+      setProjectStatus(
+        projectMode === 'create'
+          ? `已新增项目 ${syncedProject.name}`
+          : `已更新 ${syncedProject.name}，当前项目经理已同步到相关记录`,
+      );
+    } catch {
+      setProjectStatus('保存项目失败，请检查项目编号是否重复或后端服务状态');
+    } finally {
+      setIsProjectSaving(false);
+    }
   }
 
   async function persistReport(status: FormState['status']) {
@@ -926,6 +1054,117 @@ export function PMWeeklyFormPage() {
         </main>
 
         <aside className="pm-side">
+          <section className="pm-side-card">
+            <div className="pm-side-card__header">
+              <div>
+                <p>项目主数据</p>
+                <h3>{projectMode === 'create' ? '新增项目' : '项目信息维护'}</h3>
+              </div>
+              <span className="pm-chip">
+                {projectMode === 'create' ? '新增模式' : '编辑模式'}
+              </span>
+            </div>
+            <div className="pm-project-form">
+              <label className="pm-field">
+                <span className="pm-field__label">项目编号</span>
+                <input
+                  value={projectForm.id}
+                  onChange={(event) => updateProjectField('id', event.target.value)}
+                  disabled={projectMode === 'edit'}
+                />
+              </label>
+              <label className="pm-field">
+                <span className="pm-field__label">项目名称</span>
+                <input
+                  value={projectForm.name}
+                  onChange={(event) => updateProjectField('name', event.target.value)}
+                />
+              </label>
+              <label className="pm-field">
+                <span className="pm-field__label">项目经理</span>
+                <input
+                  value={projectForm.pmName}
+                  onChange={(event) => updateProjectField('pmName', event.target.value)}
+                />
+              </label>
+              <label className="pm-field">
+                <span className="pm-field__label">曲线类型</span>
+                <select
+                  value={projectForm.curveType}
+                  onChange={(event) => updateProjectField('curveType', event.target.value)}
+                >
+                  <option value="一曲线">一曲线</option>
+                  <option value="二曲线">二曲线</option>
+                  <option value="三曲线">三曲线</option>
+                </select>
+              </label>
+              <label className="pm-field">
+                <span className="pm-field__label">标注类型</span>
+                <input
+                  value={projectForm.annotationType}
+                  onChange={(event) =>
+                    updateProjectField('annotationType', event.target.value)
+                  }
+                />
+              </label>
+              <label className="pm-field">
+                <span className="pm-field__label">计划总量</span>
+                <input
+                  type="number"
+                  value={projectForm.plannedQty}
+                  onChange={(event) =>
+                    updateProjectField('plannedQty', Number(event.target.value))
+                  }
+                />
+              </label>
+              <label className="pm-field">
+                <span className="pm-field__label">数量单位</span>
+                <input
+                  value={projectForm.qtyUnit}
+                  onChange={(event) => updateProjectField('qtyUnit', event.target.value)}
+                />
+              </label>
+              <label className="pm-field">
+                <span className="pm-field__label">预算总额</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={projectForm.budgetTotal}
+                  onChange={(event) =>
+                    updateProjectField('budgetTotal', Number(event.target.value))
+                  }
+                />
+              </label>
+              <label className="pm-field pm-field--full">
+                <span className="pm-field__label">默认供应商</span>
+                <input
+                  value={projectForm.defaultSupplier}
+                  onChange={(event) =>
+                    updateProjectField('defaultSupplier', event.target.value)
+                  }
+                />
+              </label>
+            </div>
+            <div className="pm-actions pm-actions--stack">
+              <button className="pm-btn pm-btn--light" onClick={beginCreateProject}>
+                新增项目
+              </button>
+              <button className="pm-btn pm-btn--light" onClick={loadSelectedProjectIntoEditor}>
+                载入当前项目
+              </button>
+              <button
+                className="pm-btn pm-btn--primary"
+                onClick={() => void saveProjectDefinition()}
+                disabled={isProjectSaving}
+              >
+                {isProjectSaving ? '保存中...' : projectMode === 'create' ? '保存新项目' : '保存项目调整'}
+              </button>
+            </div>
+            <div className="pm-side-note">
+              {projectStatus}。调整项目经理后，会同步更新该项目现有周报中的负责人展示口径。
+            </div>
+          </section>
+
           <section className="pm-side-card">
             <div className="pm-side-card__header">
               <div>

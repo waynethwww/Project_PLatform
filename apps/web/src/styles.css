@@ -1602,6 +1602,12 @@ td {
   gap: 10px;
 }
 
+.pm-project-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .pm-records__empty {
   padding: 14px;
   border: 1px dashed #d7dde8;
@@ -1733,6 +1739,16 @@ td {
   margin-top: 12px;
 }
 
+.pm-actions--stack {
+  margin-top: 12px;
+  justify-content: stretch;
+  flex-wrap: wrap;
+}
+
+.pm-actions--stack .pm-btn {
+  flex: 1 1 120px;
+}
+
 .pm-panel--compare {
   margin-top: 18px;
 }
@@ -1798,7 +1814,8 @@ td {
     grid-template-columns: 1fr;
   }
 
-  .pm-fixed-grid {
+  .pm-fixed-grid,
+  .pm-project-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1872,6 +1889,7 @@ td {
   .pm-page-header,
   .pm-context-grid,
   .pm-fixed-grid,
+  .pm-project-form,
   .pm-entry-grid,
   .pm-stat-strip,
   .pm-side-metrics,

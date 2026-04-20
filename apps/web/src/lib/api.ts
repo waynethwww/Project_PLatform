@@ -64,6 +64,8 @@ export type ProjectOption = {
   defaultSupplier: string;
 };
 
+export type ProjectPayload = ProjectOption;
+
 export type PmWeeklyReport = {
   id: string;
   projectId: string;
@@ -181,6 +183,22 @@ export async function getPmWeeklyReportsBootstrap(projectId?: string) {
   return request<PmWeeklyReportsBootstrap>(
     `/pm-weekly-reports/bootstrap${query}`,
   );
+}
+
+export async function createProject(payload: ProjectPayload) {
+  return request<ProjectOption>('/pm-weekly-reports/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateProject(id: string, payload: ProjectPayload) {
+  return request<ProjectOption>(`/pm-weekly-reports/projects/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function createPmWeeklyReport(payload: PmWeeklyReportPayload) {

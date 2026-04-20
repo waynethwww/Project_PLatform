@@ -14,6 +14,39 @@ export class PmReportsQueryDto {
   projectId?: string;
 }
 
+export class UpsertProjectDto {
+  @IsString()
+  id!: string;
+
+  @IsString()
+  name!: string;
+
+  @IsString()
+  pmName!: string;
+
+  @IsString()
+  curveType!: string;
+
+  @IsString()
+  annotationType!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  plannedQty!: number;
+
+  @IsString()
+  qtyUnit!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  budgetTotal!: number;
+
+  @IsString()
+  defaultSupplier!: string;
+}
+
 export class UpsertPmWeeklyReportDto {
   @IsString()
   projectId!: string;
@@ -122,4 +155,3 @@ export class UpsertPmWeeklyReportDto {
   @IsIn(['draft', 'submitted'])
   status!: 'draft' | 'submitted';
 }
-

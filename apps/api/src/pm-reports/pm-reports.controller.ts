@@ -9,7 +9,11 @@ import {
   Query,
 } from '@nestjs/common';
 
-import { PmReportsQueryDto, UpsertPmWeeklyReportDto } from './pm-reports.dto';
+import {
+  PmReportsQueryDto,
+  UpsertPmWeeklyReportDto,
+  UpsertProjectDto,
+} from './pm-reports.dto';
 import { PmReportsService } from './pm-reports.service';
 
 @Controller('pm-weekly-reports')
@@ -24,6 +28,16 @@ export class PmReportsController {
   @Get('projects')
   listProjects() {
     return this.pmReportsService.listProjects();
+  }
+
+  @Post('projects')
+  createProject(@Body() payload: UpsertProjectDto) {
+    return this.pmReportsService.createProject(payload);
+  }
+
+  @Put('projects/:id')
+  updateProject(@Param('id') id: string, @Body() payload: UpsertProjectDto) {
+    return this.pmReportsService.updateProject(id, payload);
   }
 
   @Get()
@@ -54,4 +68,3 @@ export class PmReportsController {
     return this.pmReportsService.deleteReport(id);
   }
 }
-
