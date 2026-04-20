@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
+import { readFile } from 'fs/promises';
+import { join, sep } from 'path';
 
 import { DatabaseService } from '../common/database.service';
+import { demoPmReportsStore } from '../pm-reports/demo-reports';
+import {
+  PmWeeklyReportRecord,
+  PmWeeklyReportsStore,
+} from '../pm-reports/types';
 import {
   demoAlgoTrend,
   demoCostRoiTrend,
@@ -87,7 +94,7 @@ export class DashboardService {
 
       return result.rows[0];
     } catch {
-      return demoOverview;
+      return this.buildRuntimeOverview(query);
     }
   }
 
@@ -141,7 +148,7 @@ export class DashboardService {
 
       return result.rows;
     } catch {
-      return demoProjectProgress;
+      return this.buildRuntimeProjectProgress(query);
     }
   }
 
@@ -170,7 +177,7 @@ export class DashboardService {
 
       return result.rows;
     } catch {
-      return demoRiskTrend;
+      return this.buildRuntimeRiskTrend(query);
     }
   }
 
@@ -202,7 +209,7 @@ export class DashboardService {
 
       return result.rows;
     } catch {
-      return demoCostRoiTrend;
+      return this.buildRuntimeCostTrend(query);
     }
   }
 
@@ -232,7 +239,7 @@ export class DashboardService {
 
       return result.rows;
     } catch {
-      return demoSupplierTrend;
+      return this.buildRuntimeSupplierTrend(query);
     }
   }
 
@@ -260,8 +267,166 @@ export class DashboardService {
 
       return result.rows;
     } catch {
+      return this.buildRuntimeAlgoTrend(query);
+    }
+  }
+
+  private async buildRuntimeOverview(query: DashboardQueryDto) {
+    const { latestReports, periodReports } = await this.getRuntimeScope(query);
+    if (!latestReports.length) {
+      return demoOverview;
+    }
+
+    const curve1Reports = latestReports.filter(
+      (report) => report.curveType === '一曲线',
+    );
+    const curve23Reports = latestReports.filter((report) =>
+      ['二曲线', '三曲线'].includes(report.curveType),
+    );
+    const totalContractAmount = this.sum(latestReports, 'budgetTotal');
+    const totalCost = this.sum(latestReports, 'costConsumed');
+
+    return {
+      active_projects: latestReports.length,
+      active_pms: new Set(latestReports.map((report) => report.pmName)).size,
+      total_contract_amount: totalContractAmount,
+      curve1_contract_amount: this.sum(curve1Reports, 'budgetTotal'),
+      curve23_contract_amount: this.sum(curve23Reports, 'budgetTotal'),
+      curve1_delivery_in_period: this.sum(
+        periodReports.filter((report) => report.curveType === '一曲线'),
+        'weeklyDeliveryAmount',
+      ),
+      curve1_health_rate: this.safeRate(
+        curve1Reports.filter((report) => report.riskLevel === '绿').length,
+        curve1Reports.length,
+      ),
+      curve23_health_rate: this.safeRate(
+        curve23Reports.filter((report) => {
+          const progress = this.asUnit(report.progressPct);
+          return progress === 0 || report.costConsumed <= report.budgetTotal * progress;
+        }).length,
+        curve23Reports.length,
+      ),
+      red_risk_projects: latestReports.filter((report) => report.riskLevel === '红')
+        .length,
+      yellow_risk_projects: latestReports.filter(
+        (report) => report.riskLevel === '黄',
+      ).length,
+      total_cost: totalCost,
+      roi_value: totalCost > 0 ? totalContractAmount / totalCost : 0,
+    };
+  }
+
+  private async buildRuntimeProjectProgress(query: DashboardQueryDto) {
+    const { filteredReports } = await this.getRuntimeScope(query);
+    if (!filteredReports.length) {
+      return demoProjectProgress;
+    }
+
+    const reportGroups = this.groupByProject(filteredReports);
+    return Array.from(reportGroups.values())
+      .map((reports) => {
+        const sorted = [...reports].sort((left, right) =>
+          this.compareReports(left, right),
+        );
+        const endReport = sorted[sorted.length - 1];
+        const startBaseline =
+          sorted.find((report) => report.weekStart >= query.startDate) || sorted[0];
+        const deliveryInPeriod = reports
+          .filter((report) => this.isInRange(report.weekStart, query))
+          .reduce((sum, report) => sum + report.weeklyDeliveryAmount, 0);
+
+        return {
+          project_id: endReport.projectId,
+          project_name: endReport.projectName,
+          curve_type: endReport.curveType,
+          pm_user_id: endReport.pmName,
+          start_progress: this.asUnit(startBaseline.progressPct),
+          end_progress: this.asUnit(endReport.progressPct),
+          progress_delta:
+            this.asUnit(endReport.progressPct) -
+            this.asUnit(startBaseline.progressPct),
+          delivery_in_period: deliveryInPeriod,
+          cost_at_end: endReport.costConsumed,
+          current_risk_level: endReport.riskLevel,
+        };
+      })
+      .sort(
+        (left, right) =>
+          right.progress_delta - left.progress_delta ||
+          right.delivery_in_period - left.delivery_in_period,
+      );
+  }
+
+  private async buildRuntimeRiskTrend(query: DashboardQueryDto) {
+    const { periodReports } = await this.getRuntimeScope(query);
+    if (!periodReports.length) {
+      return demoRiskTrend;
+    }
+
+    return this.groupByDate(periodReports).map(([date, reports]) => ({
+      snapshot_date: date,
+      red_count: reports.filter((report) => report.riskLevel === '红').length,
+      yellow_count: reports.filter((report) => report.riskLevel === '黄').length,
+      green_count: reports.filter((report) => report.riskLevel === '绿').length,
+    }));
+  }
+
+  private async buildRuntimeCostTrend(query: DashboardQueryDto) {
+    const { periodReports } = await this.getRuntimeScope(query);
+    if (!periodReports.length) {
+      return demoCostRoiTrend;
+    }
+
+    return this.groupByDate(periodReports).map(([date, reports]) => {
+      const totalContractAmount = this.sumUniqueProjectBudget(reports);
+      const totalCost = this.sum(reports, 'costConsumed');
+      return {
+        snapshot_date: date,
+        total_cost_consumed: totalCost,
+        weekly_delivery_amount: this.sum(reports, 'weeklyDeliveryAmount'),
+        amount_delivered: this.sum(reports, 'amountDelivered'),
+        roi_value: totalCost > 0 ? totalContractAmount / totalCost : 0,
+      };
+    });
+  }
+
+  private async buildRuntimeSupplierTrend(query: DashboardQueryDto) {
+    const { periodReports } = await this.getRuntimeScope(query);
+    if (!periodReports.length) {
+      return demoSupplierTrend;
+    }
+
+    return this.groupByDate(periodReports).map(([date, reports]) => ({
+      snapshot_week: date,
+      avg_quality_pass: this.average(reports, (report) =>
+        this.asUnit(report.supplierQuality),
+      ),
+      avg_otd_rate: this.average(reports, (report) =>
+        this.asUnit(report.supplierOtdRate),
+      ),
+      avg_supplier_cooperation: this.average(reports, (report) =>
+        this.asUnit(report.supplierCooperation),
+      ),
+      total_payout: this.sum(reports, 'costConsumed'),
+    }));
+  }
+
+  private async buildRuntimeAlgoTrend(query: DashboardQueryDto) {
+    const { periodReports } = await this.getRuntimeScope(query);
+    if (!periodReports.length) {
       return demoAlgoTrend;
     }
+
+    return this.groupByDate(periodReports).map(([date, reports]) => ({
+      batch_date: date,
+      avg_modification_rate: this.average(reports, (report) =>
+        this.asUnit(report.modificationRate),
+      ),
+      avg_time_save_pct: this.average(reports, (report) =>
+        this.asUnit(report.timeSavePct),
+      ),
+    }));
   }
 
   private buildProjectFilters(
@@ -297,5 +462,132 @@ export class DashboardService {
     startingIndex: number,
   ): { sql: string; params: string[] } {
     return this.buildProjectFilters(query, startingIndex);
+  }
+
+  private async getRuntimeScope(query: DashboardQueryDto) {
+    const store = await this.readRuntimeStore();
+    const filteredReports = store.reports
+      .filter((report) => this.matchCurveType(report, query.curveType))
+      .filter((report) => report.weekStart <= query.endDate)
+      .sort((left, right) => this.compareReports(left, right));
+    const periodReports = filteredReports.filter((report) =>
+      this.isInRange(report.weekStart, query),
+    );
+
+    return {
+      filteredReports,
+      periodReports,
+      latestReports: this.pickLatestReports(filteredReports),
+    };
+  }
+
+  private async readRuntimeStore(): Promise<PmWeeklyReportsStore> {
+    try {
+      const raw = await readFile(this.getRuntimeStorePath(), 'utf-8');
+      return JSON.parse(raw) as PmWeeklyReportsStore;
+    } catch {
+      return demoPmReportsStore;
+    }
+  }
+
+  private getRuntimeStorePath() {
+    const cwd = process.cwd();
+    const apiRoot = cwd.endsWith(`${sep}apps${sep}api`)
+      ? cwd
+      : join(cwd, 'apps', 'api');
+    return join(apiRoot, 'data', 'pm-weekly-reports.runtime.json');
+  }
+
+  private pickLatestReports(reports: PmWeeklyReportRecord[]) {
+    const latestByProject = new Map<string, PmWeeklyReportRecord>();
+
+    for (const report of reports) {
+      const existing = latestByProject.get(report.projectId);
+      if (!existing || this.compareReports(existing, report) < 0) {
+        latestByProject.set(report.projectId, report);
+      }
+    }
+
+    return Array.from(latestByProject.values());
+  }
+
+  private groupByProject(reports: PmWeeklyReportRecord[]) {
+    const groups = new Map<string, PmWeeklyReportRecord[]>();
+
+    for (const report of reports) {
+      const current = groups.get(report.projectId) || [];
+      current.push(report);
+      groups.set(report.projectId, current);
+    }
+
+    return groups;
+  }
+
+  private groupByDate(reports: PmWeeklyReportRecord[]) {
+    const groups = new Map<string, PmWeeklyReportRecord[]>();
+
+    for (const report of reports) {
+      const current = groups.get(report.weekStart) || [];
+      current.push(report);
+      groups.set(report.weekStart, current);
+    }
+
+    return Array.from(groups.entries()).sort(([left], [right]) =>
+      left.localeCompare(right),
+    );
+  }
+
+  private compareReports(left: PmWeeklyReportRecord, right: PmWeeklyReportRecord) {
+    const weekCompare = left.weekStart.localeCompare(right.weekStart);
+    if (weekCompare !== 0) {
+      return weekCompare;
+    }
+
+    return left.updatedAt.localeCompare(right.updatedAt);
+  }
+
+  private matchCurveType(
+    report: PmWeeklyReportRecord,
+    curveType?: string,
+  ) {
+    return !curveType || report.curveType === curveType;
+  }
+
+  private isInRange(date: string, query: DashboardQueryDto) {
+    return date >= query.startDate && date <= query.endDate;
+  }
+
+  private sum<T extends keyof PmWeeklyReportRecord>(
+    reports: PmWeeklyReportRecord[],
+    key: T,
+  ) {
+    return reports.reduce((total, report) => {
+      const value = report[key];
+      return total + (typeof value === 'number' ? value : 0);
+    }, 0);
+  }
+
+  private sumUniqueProjectBudget(reports: PmWeeklyReportRecord[]) {
+    const latestByProject = this.pickLatestReports(reports);
+    return latestByProject.reduce((total, report) => total + report.budgetTotal, 0);
+  }
+
+  private average(
+    reports: PmWeeklyReportRecord[],
+    selector: (report: PmWeeklyReportRecord) => number,
+  ) {
+    if (!reports.length) {
+      return 0;
+    }
+
+    return reports.reduce((total, report) => total + selector(report), 0) / reports.length;
+  }
+
+  private asUnit(value: number) {
+    return value > 1 ? value / 100 : value;
+  }
+
+  private safeRate(part: number, total: number) {
+    return total > 0 ? part / total : 0;
   }
 }

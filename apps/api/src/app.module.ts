@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './common/database.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DingtalkModule } from './dingtalk/dingtalk.module';
+import { PmReportsModule } from './pm-reports/pm-reports.module';
 
 @Module({
   imports: [
@@ -11,7 +12,7 @@ import { DingtalkModule } from './dingtalk/dingtalk.module';
     DatabaseModule,
     DingtalkModule,
     DashboardModule,
+    PmReportsModule,
   ],
 })
 export class AppModule {}
-

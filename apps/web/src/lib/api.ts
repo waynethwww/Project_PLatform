@@ -52,10 +52,84 @@ export type DashboardFilters = {
   curveType?: string;
 };
 
+export type ProjectOption = {
+  id: string;
+  name: string;
+  pmName: string;
+  curveType: string;
+  annotationType: string;
+  plannedQty: number;
+  qtyUnit: string;
+  budgetTotal: number;
+  defaultSupplier: string;
+};
+
+export type PmWeeklyReport = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  pmName: string;
+  curveType: string;
+  annotationType: string;
+  plannedQty: number;
+  qtyUnit: string;
+  budgetTotal: number;
+  weekStart: string;
+  progressPct: number;
+  actualQty: number;
+  weeklyDeliveryAmount: number;
+  amountDelivered: number;
+  costConsumed: number;
+  qualityPass: number;
+  clientScore: number;
+  riskLevel: '绿' | '黄' | '红';
+  riskDesc: string;
+  blockerTitle: string;
+  blockerStatus: 'open' | 'watching' | 'closed';
+  blockerDueDate: string;
+  suggestedAction: string;
+  supplierName: string;
+  supplierHeadcount: number;
+  supplierQuality: number;
+  supplierOtdRate: number;
+  supplierCooperation: number;
+  supplierIssue: string;
+  algoVersion: string;
+  modificationRate: number;
+  timeSavePct: number;
+  algoAdvice: string;
+  hoursSpent: number;
+  pmHourlyCost: number;
+  pmComment: string;
+  nextWeekFocus: string;
+  status: 'draft' | 'submitted';
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PmWeeklyReportPayload = Omit<
+  PmWeeklyReport,
+  | 'id'
+  | 'projectName'
+  | 'pmName'
+  | 'curveType'
+  | 'annotationType'
+  | 'plannedQty'
+  | 'qtyUnit'
+  | 'budgetTotal'
+  | 'createdAt'
+  | 'updatedAt'
+>;
+
+export type PmWeeklyReportsBootstrap = {
+  projects: ProjectOption[];
+  reports: PmWeeklyReport[];
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
-async function request<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`);
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, init);
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`);
   }
@@ -100,3 +174,36 @@ export async function getAlgoTrend(filters: DashboardFilters) {
   return request<TrendRow[]>(`/dashboard/algo-trend?${toQuery(filters)}`);
 }
 
+export async function getPmWeeklyReportsBootstrap(projectId?: string) {
+  const query = projectId
+    ? `?${new URLSearchParams({ projectId }).toString()}`
+    : '';
+  return request<PmWeeklyReportsBootstrap>(
+    `/pm-weekly-reports/bootstrap${query}`,
+  );
+}
+
+export async function createPmWeeklyReport(payload: PmWeeklyReportPayload) {
+  return request<PmWeeklyReport>('/pm-weekly-reports', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updatePmWeeklyReport(
+  id: string,
+  payload: PmWeeklyReportPayload,
+) {
+  return request<PmWeeklyReport>(`/pm-weekly-reports/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deletePmWeeklyReport(id: string) {
+  return request<{ success: boolean }>(`/pm-weekly-reports/${id}`, {
+    method: 'DELETE',
+  });
+}
