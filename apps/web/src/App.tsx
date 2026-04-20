@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
 
-import { DashboardPage } from './pages/DashboardPage';
+import { DashboardPage as WeeklyReportPage } from './pages/DashboardPage';
 import { PMWeeklyFormPage } from './pages/PMWeeklyFormPage';
 
-type AppView = 'dashboard' | 'pm-form';
+type AppView = 'weekly-report' | 'pm-form';
 
 function getCurrentView(): AppView {
   if (typeof window === 'undefined') {
-    return 'dashboard';
+    return 'weekly-report';
   }
 
-  return window.location.hash === '#/pm-form' ? 'pm-form' : 'dashboard';
+  return window.location.hash === '#/pm-form' ? 'pm-form' : 'weekly-report';
 }
 
 export default function App() {
@@ -21,8 +21,8 @@ export default function App() {
       setView(getCurrentView());
     }
 
-    if (!window.location.hash) {
-      window.location.hash = '#/dashboard';
+    if (!window.location.hash || window.location.hash === '#/dashboard') {
+      window.location.hash = '#/weekly-report';
     }
 
     window.addEventListener('hashchange', handleHashChange);
@@ -30,22 +30,23 @@ export default function App() {
   }, []);
 
   function navigate(nextView: AppView) {
-    window.location.hash = nextView === 'dashboard' ? '#/dashboard' : '#/pm-form';
+    window.location.hash =
+      nextView === 'weekly-report' ? '#/weekly-report' : '#/pm-form';
   }
 
   return (
     <div className="app-shell">
       <div className="app-switcher">
         <div>
-          <p className="app-switcher__eyebrow">Project Platform Preview</p>
-          <strong>系统页面预览</strong>
+          <p className="app-switcher__eyebrow">Project Weekly Report System</p>
+          <strong>项目经营周报系统</strong>
         </div>
         <div className="app-switcher__buttons">
           <button
-            className={view === 'dashboard' ? 'is-active' : ''}
-            onClick={() => navigate('dashboard')}
+            className={view === 'weekly-report' ? 'is-active' : ''}
+            onClick={() => navigate('weekly-report')}
           >
-            管理大屏
+            周汇报视图
           </button>
           <button
             className={view === 'pm-form' ? 'is-active' : ''}
@@ -55,8 +56,7 @@ export default function App() {
           </button>
         </div>
       </div>
-      {view === 'dashboard' ? <DashboardPage /> : <PMWeeklyFormPage />}
+      {view === 'weekly-report' ? <WeeklyReportPage /> : <PMWeeklyFormPage />}
     </div>
   );
 }
-
