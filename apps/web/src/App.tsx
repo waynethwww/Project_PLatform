@@ -1,16 +1,25 @@
 import { useEffect, useState } from 'react';
 
 import { DashboardPage as WeeklyReportPage } from './pages/DashboardPage';
+import { ExpertNetworkFormPage } from './pages/ExpertNetworkFormPage';
 import { PMWeeklyFormPage } from './pages/PMWeeklyFormPage';
 
-type AppView = 'weekly-report' | 'pm-form';
+type AppView = 'weekly-report' | 'pm-form' | 'expert-network';
 
 function getCurrentView(): AppView {
   if (typeof window === 'undefined') {
     return 'weekly-report';
   }
 
-  return window.location.hash === '#/pm-form' ? 'pm-form' : 'weekly-report';
+  if (window.location.hash === '#/pm-form') {
+    return 'pm-form';
+  }
+
+  if (window.location.hash === '#/expert-network') {
+    return 'expert-network';
+  }
+
+  return 'weekly-report';
 }
 
 export default function App() {
@@ -31,7 +40,11 @@ export default function App() {
 
   function navigate(nextView: AppView) {
     window.location.hash =
-      nextView === 'weekly-report' ? '#/weekly-report' : '#/pm-form';
+      nextView === 'weekly-report'
+        ? '#/weekly-report'
+        : nextView === 'pm-form'
+          ? '#/pm-form'
+          : '#/expert-network';
   }
 
   return (
@@ -54,9 +67,21 @@ export default function App() {
           >
             PM 周填报
           </button>
+          <button
+            className={view === 'expert-network' ? 'is-active' : ''}
+            onClick={() => navigate('expert-network')}
+          >
+            专家网络填报
+          </button>
         </div>
       </div>
-      {view === 'weekly-report' ? <WeeklyReportPage /> : <PMWeeklyFormPage />}
+      {view === 'weekly-report' ? (
+        <WeeklyReportPage />
+      ) : view === 'pm-form' ? (
+        <PMWeeklyFormPage />
+      ) : (
+        <ExpertNetworkFormPage />
+      )}
     </div>
   );
 }

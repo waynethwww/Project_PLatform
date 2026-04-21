@@ -145,6 +145,52 @@ export type PmWeeklyReportsBootstrap = {
   reports: PmWeeklyReport[];
 };
 
+export type ExpertDomainDistributionItem = {
+  id: string;
+  domain: string;
+  count: number;
+};
+
+export type ExpertNetworkWeeklyReport = {
+  id: string;
+  weekStart: string;
+  ownerName: string;
+  newExpertsCount: number;
+  weeklySubmittedCases: number;
+  totalQcPassedCases: number;
+  activeExpertsCount: number;
+  totalDomainDistribution: ExpertDomainDistributionItem[];
+  weeklyNewDomainDistribution: ExpertDomainDistributionItem[];
+  summary: string;
+  nextWeekFocus: string;
+  remarks: string;
+  status: 'draft' | 'submitted';
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ExpertNetworkWeeklyReportPayload = Omit<
+  ExpertNetworkWeeklyReport,
+  'id' | 'createdAt' | 'updatedAt'
+>;
+
+export type ExpertNetworkBootstrap = {
+  currentReport: ExpertNetworkWeeklyReport | null;
+  baselineReport: ExpertNetworkWeeklyReport | null;
+  latestReport: ExpertNetworkWeeklyReport | null;
+  reports: ExpertNetworkWeeklyReport[];
+  domainCatalog: string[];
+};
+
+export type ExpertNetworkDashboardData = {
+  latestReport: ExpertNetworkWeeklyReport | null;
+  previousReport: ExpertNetworkWeeklyReport | null;
+  reportsInRange: ExpertNetworkWeeklyReport[];
+  totalDomainDistribution: ExpertDomainDistributionItem[];
+  weeklyNewDomainDistribution: ExpertDomainDistributionItem[];
+  domainCatalog: string[];
+};
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -257,6 +303,48 @@ export async function updatePmWeeklyReport(
 
 export async function deletePmWeeklyReport(id: string) {
   return request<{ success: boolean }>(`/pm-weekly-reports/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getExpertNetworkBootstrap(weekStart?: string) {
+  const query = weekStart
+    ? `?${new URLSearchParams({ weekStart }).toString()}`
+    : '';
+  return request<ExpertNetworkBootstrap>(`/expert-network/bootstrap${query}`);
+}
+
+export async function getExpertNetworkDashboard(filters: {
+  startDate: string;
+  endDate: string;
+}) {
+  const query = new URLSearchParams(filters).toString();
+  return request<ExpertNetworkDashboardData>(`/expert-network/dashboard?${query}`);
+}
+
+export async function createExpertNetworkReport(
+  payload: ExpertNetworkWeeklyReportPayload,
+) {
+  return request<ExpertNetworkWeeklyReport>('/expert-network', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateExpertNetworkReport(
+  id: string,
+  payload: ExpertNetworkWeeklyReportPayload,
+) {
+  return request<ExpertNetworkWeeklyReport>(`/expert-network/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteExpertNetworkReport(id: string) {
+  return request<{ success: boolean }>(`/expert-network/${id}`, {
     method: 'DELETE',
   });
 }
