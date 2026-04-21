@@ -14,6 +14,14 @@ import {
 
 type FormState = PmWeeklyReportPayload;
 type ProjectEditorMode = 'create' | 'edit';
+type NumericInputProps = {
+  value: number;
+  onValueChange: (value: number) => void;
+  allowDecimal?: boolean;
+  min?: number;
+  max?: number;
+  step?: number | string;
+};
 
 const fallbackProject: ProjectOption = {
   id: 'temp-project',
@@ -201,6 +209,77 @@ function formatDateTime(value?: string) {
   });
 }
 
+function normalizeNumericValue(
+  raw: string,
+  allowDecimal: boolean,
+  min?: number,
+  max?: number,
+) {
+  if (raw === '' || raw === '.') {
+    return 0;
+  }
+
+  const parsed = allowDecimal ? Number.parseFloat(raw) : Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+
+  let normalized = parsed;
+  if (typeof min === 'number') {
+    normalized = Math.max(min, normalized);
+  }
+  if (typeof max === 'number') {
+    normalized = Math.min(max, normalized);
+  }
+  return normalized;
+}
+
+function NumericInput(props: NumericInputProps) {
+  const { value, onValueChange, allowDecimal = false, min, max, step } = props;
+  const [text, setText] = useState(String(value));
+  const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setText(String(value));
+    }
+  }, [isEditing, value]);
+
+  function handleChange(event: ChangeEvent<HTMLInputElement>) {
+    const next = event.target.value;
+    const pattern = allowDecimal ? /^\d*(\.\d*)?$/ : /^\d*$/;
+    if (!pattern.test(next)) {
+      return;
+    }
+
+    setText(next);
+    if (next === '' || next === '.') {
+      return;
+    }
+
+    onValueChange(normalizeNumericValue(next, allowDecimal, min, max));
+  }
+
+  function handleBlur() {
+    setIsEditing(false);
+    const normalized = normalizeNumericValue(text, allowDecimal, min, max);
+    onValueChange(normalized);
+    setText(String(normalized));
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode={allowDecimal ? 'decimal' : 'numeric'}
+      value={text}
+      onFocus={() => setIsEditing(true)}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      step={step}
+    />
+  );
+}
+
 export function PMWeeklyFormPage() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [reports, setReports] = useState<PmWeeklyReport[]>([]);
@@ -275,6 +354,12 @@ export function PMWeeklyFormPage() {
     projects.find((project) => project.id === form.projectId) ||
     projects[0] ||
     fallbackProject;
+
+  useEffect(() => {
+    if (projectMode === 'edit') {
+      setProjectForm(cloneProject(selectedProject));
+    }
+  }, [projectMode, selectedProject]);
 
   const activeReport = reports.find((report) => report.id === activeReportId) || null;
 
@@ -759,40 +844,34 @@ export function PMWeeklyFormPage() {
                 <div className="pm-entry-grid">
                   <label className="pm-field">
                     <span className="pm-field__label">进度% <em>必填</em></span>
-                    <input
-                      type="number"
+                    <NumericInput
                       value={form.progressPct}
-                      onChange={(event) => updateField('progressPct', Number(event.target.value))}
+                      onValueChange={(value) => updateField('progressPct', value)}
                     />
                   </label>
                   <label className="pm-field">
                     <span className="pm-field__label">实际交付量 <em>必填</em></span>
-                    <input
-                      type="number"
+                    <NumericInput
                       value={form.actualQty}
-                      onChange={(event) => updateField('actualQty', Number(event.target.value))}
+                      onValueChange={(value) => updateField('actualQty', value)}
                     />
                   </label>
                   <label className="pm-field">
                     <span className="pm-field__label">本周交付金额</span>
-                    <input
-                      type="number"
+                    <NumericInput
+                      allowDecimal
                       step="0.1"
                       value={form.weeklyDeliveryAmount}
-                      onChange={(event) =>
-                        updateField('weeklyDeliveryAmount', Number(event.target.value))
-                      }
+                      onValueChange={(value) => updateField('weeklyDeliveryAmount', value)}
                     />
                   </label>
                   <label className="pm-field">
                     <span className="pm-field__label">累计交付金额</span>
-                    <input
-                      type="number"
+                    <NumericInput
+                      allowDecimal
                       step="0.1"
                       value={form.amountDelivered}
-                      onChange={(event) =>
-                        updateField('amountDelivered', Number(event.target.value))
-                      }
+                      onValueChange={(value) => updateField('amountDelivered', value)}
                     />
                   </label>
                   <label className="pm-field pm-field--full">
@@ -818,46 +897,43 @@ export function PMWeeklyFormPage() {
                 <div className="pm-entry-grid">
                   <label className="pm-field">
                     <span className="pm-field__label">成本消耗</span>
-                    <input
-                      type="number"
+                    <NumericInput
+                      allowDecimal
                       step="0.1"
                       value={form.costConsumed}
-                      onChange={(event) => updateField('costConsumed', Number(event.target.value))}
+                      onValueChange={(value) => updateField('costConsumed', value)}
                     />
                   </label>
                   <label className="pm-field">
                     <span className="pm-field__label">验收率%</span>
-                    <input
-                      type="number"
+                    <NumericInput
                       value={form.qualityPass}
-                      onChange={(event) => updateField('qualityPass', Number(event.target.value))}
+                      onValueChange={(value) => updateField('qualityPass', value)}
                     />
                   </label>
                   <label className="pm-field">
                     <span className="pm-field__label">客户评分</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max="5"
+                    <NumericInput
+                      allowDecimal
+                      min={1}
+                      max={5}
                       step="0.1"
                       value={form.clientScore}
-                      onChange={(event) => updateField('clientScore', Number(event.target.value))}
+                      onValueChange={(value) => updateField('clientScore', value)}
                     />
                   </label>
                   <label className="pm-field">
                     <span className="pm-field__label">PM工时</span>
-                    <input
-                      type="number"
+                    <NumericInput
                       value={form.hoursSpent}
-                      onChange={(event) => updateField('hoursSpent', Number(event.target.value))}
+                      onValueChange={(value) => updateField('hoursSpent', value)}
                     />
                   </label>
                   <label className="pm-field">
                     <span className="pm-field__label">PM小时成本</span>
-                    <input
-                      type="number"
+                    <NumericInput
                       value={form.pmHourlyCost}
-                      onChange={(event) => updateField('pmHourlyCost', Number(event.target.value))}
+                      onValueChange={(value) => updateField('pmHourlyCost', value)}
                     />
                   </label>
                   <div className="pm-auto-box">
@@ -968,42 +1044,30 @@ export function PMWeeklyFormPage() {
                   </label>
                   <label className="pm-field">
                     <span className="pm-field__label">投入人数</span>
-                    <input
-                      type="number"
+                    <NumericInput
                       value={form.supplierHeadcount}
-                      onChange={(event) =>
-                        updateField('supplierHeadcount', Number(event.target.value))
-                      }
+                      onValueChange={(value) => updateField('supplierHeadcount', value)}
                     />
                   </label>
                   <label className="pm-field">
                     <span className="pm-field__label">供应商质量%</span>
-                    <input
-                      type="number"
+                    <NumericInput
                       value={form.supplierQuality}
-                      onChange={(event) =>
-                        updateField('supplierQuality', Number(event.target.value))
-                      }
+                      onValueChange={(value) => updateField('supplierQuality', value)}
                     />
                   </label>
                   <label className="pm-field">
                     <span className="pm-field__label">准时率%</span>
-                    <input
-                      type="number"
+                    <NumericInput
                       value={form.supplierOtdRate}
-                      onChange={(event) =>
-                        updateField('supplierOtdRate', Number(event.target.value))
-                      }
+                      onValueChange={(value) => updateField('supplierOtdRate', value)}
                     />
                   </label>
                   <label className="pm-field">
                     <span className="pm-field__label">配合度%</span>
-                    <input
-                      type="number"
+                    <NumericInput
                       value={form.supplierCooperation}
-                      onChange={(event) =>
-                        updateField('supplierCooperation', Number(event.target.value))
-                      }
+                      onValueChange={(value) => updateField('supplierCooperation', value)}
                     />
                   </label>
                   <label className="pm-field">
@@ -1015,20 +1079,16 @@ export function PMWeeklyFormPage() {
                   </label>
                   <label className="pm-field">
                     <span className="pm-field__label">修正率%</span>
-                    <input
-                      type="number"
+                    <NumericInput
                       value={form.modificationRate}
-                      onChange={(event) =>
-                        updateField('modificationRate', Number(event.target.value))
-                      }
+                      onValueChange={(value) => updateField('modificationRate', value)}
                     />
                   </label>
                   <label className="pm-field">
                     <span className="pm-field__label">提效%</span>
-                    <input
-                      type="number"
+                    <NumericInput
                       value={form.timeSavePct}
-                      onChange={(event) => updateField('timeSavePct', Number(event.target.value))}
+                      onValueChange={(value) => updateField('timeSavePct', value)}
                     />
                   </label>
                   <label className="pm-field pm-field--full">
@@ -1132,12 +1192,9 @@ export function PMWeeklyFormPage() {
               </label>
               <label className="pm-field">
                 <span className="pm-field__label">计划总量</span>
-                <input
-                  type="number"
+                <NumericInput
                   value={projectForm.plannedQty}
-                  onChange={(event) =>
-                    updateProjectField('plannedQty', Number(event.target.value))
-                  }
+                  onValueChange={(value) => updateProjectField('plannedQty', value)}
                 />
               </label>
               <label className="pm-field">
@@ -1149,13 +1206,11 @@ export function PMWeeklyFormPage() {
               </label>
               <label className="pm-field">
                 <span className="pm-field__label">预算总额</span>
-                <input
-                  type="number"
+                <NumericInput
+                  allowDecimal
                   step="0.1"
                   value={projectForm.budgetTotal}
-                  onChange={(event) =>
-                    updateProjectField('budgetTotal', Number(event.target.value))
-                  }
+                  onValueChange={(value) => updateProjectField('budgetTotal', value)}
                 />
               </label>
               <label className="pm-field pm-field--full">
