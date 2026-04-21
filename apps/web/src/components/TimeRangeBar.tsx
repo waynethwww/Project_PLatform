@@ -1,3 +1,5 @@
+import { AppSelect } from './AppSelect';
+
 type TimeRangeBarProps = {
   startDate: string;
   endDate: string;
@@ -51,27 +53,33 @@ export function TimeRangeBar(props: TimeRangeBarProps) {
         </label>
         <label>
           统计模式
-          <select
+          <AppSelect
             value={mode}
-            onChange={(event) =>
-              onModeChange(event.target.value as 'latest' | 'period')
-            }
-          >
-            <option value="period">时间区间</option>
-            <option value="latest">最新快照</option>
-          </select>
+            onChange={(nextValue) => onModeChange(nextValue as 'latest' | 'period')}
+            tone="dark"
+            size="compact"
+            ariaLabel="统计模式"
+            options={[
+              { value: 'period', label: '时间区间' },
+              { value: 'latest', label: '最新快照' },
+            ]}
+          />
         </label>
         <label>
           曲线类型
-          <select
+          <AppSelect
             value={curveType}
-            onChange={(event) => onCurveTypeChange(event.target.value)}
-          >
-            <option value="">全部曲线</option>
-            <option value="一曲线">一曲线</option>
-            <option value="二曲线">二曲线</option>
-            <option value="三曲线">三曲线</option>
-          </select>
+            onChange={onCurveTypeChange}
+            tone="dark"
+            size="compact"
+            ariaLabel="曲线类型"
+            options={[
+              { value: '', label: '全部曲线' },
+              { value: '一曲线', label: '一曲线' },
+              { value: '二曲线', label: '二曲线' },
+              { value: '三曲线', label: '三曲线' },
+            ]}
+          />
         </label>
       </div>
       <div className="toolbar__right">
@@ -82,4 +90,3 @@ export function TimeRangeBar(props: TimeRangeBarProps) {
     </div>
   );
 }
-

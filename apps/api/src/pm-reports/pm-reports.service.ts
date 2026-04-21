@@ -24,7 +24,7 @@ export class PmReportsService {
     const store = await this.readStore();
     return {
       projects: store.projects,
-      reports: this.filterAndSortReports(store.reports, projectId),
+      reports: this.filterAndSortReports(store.reports, projectId, store.projects),
     };
   }
 
@@ -67,9 +67,21 @@ export class PmReportsService {
     return nextProject;
   }
 
+  async archiveProject(id: string) {
+    return this.updateProjectStatus(id, 'archived');
+  }
+
+  async recycleProject(id: string) {
+    return this.updateProjectStatus(id, 'recycled');
+  }
+
+  async restoreProject(id: string) {
+    return this.updateProjectStatus(id, 'active');
+  }
+
   async listReports(projectId?: string) {
     const store = await this.readStore();
-    return this.filterAndSortReports(store.reports, projectId);
+    return this.filterAndSortReports(store.reports, projectId, store.projects);
   }
 
   async getReport(id: string) {
@@ -170,9 +182,18 @@ export class PmReportsService {
   private filterAndSortReports(
     reports: PmWeeklyReportRecord[],
     projectId?: string,
+    projects?: ProjectOption[],
   ) {
+    const activeProjectIds = new Set(
+      (projects || [])
+        .filter((project) => project.status !== 'recycled' && project.status !== 'archived')
+        .map((project) => project.id),
+    );
+
     return reports
-      .filter((item) => (projectId ? item.projectId === projectId : true))
+      .filter((item) =>
+        projectId ? item.projectId === projectId : activeProjectIds.has(item.projectId),
+      )
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
@@ -199,17 +220,31 @@ export class PmReportsService {
     return curveType.trim() === '一曲线';
   }
 
+  private normalizeNonNegativeNumber(value: unknown, fallback = 0) {
+    const numeric =
+      typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''));
+    if (!Number.isFinite(numeric) || numeric < 0) {
+      return fallback;
+    }
+    return numeric;
+  }
+
   private normalizeProjectRecord(project: ProjectOption): ProjectOption {
     const baseProject = {
-      id: project.id.trim(),
-      name: project.name.trim(),
-      pmName: project.pmName.trim(),
-      curveType: project.curveType.trim(),
-      annotationType: project.annotationType.trim(),
-      plannedQty: project.plannedQty,
-      qtyUnit: project.qtyUnit.trim(),
-      budgetTotal: project.budgetTotal,
-      defaultSupplier: project.defaultSupplier.trim(),
+      id: project.id?.trim() || '',
+      name: project.name?.trim() || '',
+      pmName: project.pmName?.trim() || '',
+      curveType: project.curveType?.trim() || '',
+      annotationType: project.annotationType?.trim() || '',
+      plannedQty: this.normalizeNonNegativeNumber(project.plannedQty),
+      qtyUnit: project.qtyUnit?.trim() || '',
+      contractAmount: this.normalizeNonNegativeNumber(
+        project.contractAmount,
+        this.normalizeNonNegativeNumber(project.budgetTotal),
+      ),
+      budgetTotal: this.normalizeNonNegativeNumber(project.budgetTotal),
+      defaultSupplier: project.defaultSupplier?.trim() || '',
+      status: project.status || 'active',
     };
 
     if (this.isCurve1Project(baseProject.curveType)) {
@@ -239,8 +274,12 @@ export class PmReportsService {
           annotationType: report.annotationType,
           plannedQty: report.plannedQty,
           qtyUnit: report.qtyUnit,
+          contractAmount:
+            this.normalizeNonNegativeNumber(report.contractAmount) ||
+            this.normalizeNonNegativeNumber(report.budgetTotal),
           budgetTotal: report.budgetTotal,
           defaultSupplier: report.supplierName,
+          status: 'active',
         });
 
     const riskItems = this.normalizeRiskItems(report);
@@ -255,6 +294,9 @@ export class PmReportsService {
       annotationType: normalizedProject.annotationType,
       plannedQty: normalizedProject.plannedQty,
       qtyUnit: normalizedProject.qtyUnit,
+      contractAmount:
+        this.normalizeNonNegativeNumber(report.contractAmount) ||
+        normalizedProject.contractAmount,
       budgetTotal: normalizedProject.budgetTotal,
       riskLevel: primaryRisk.level,
       riskDesc: primaryRisk.description,
@@ -300,9 +342,30 @@ export class PmReportsService {
       annotationType: payload.annotationType.trim(),
       plannedQty: payload.plannedQty,
       qtyUnit: payload.qtyUnit.trim(),
+      contractAmount: payload.contractAmount,
       budgetTotal: payload.budgetTotal,
       defaultSupplier: payload.defaultSupplier.trim(),
+      status: payload.status,
     });
+  }
+
+  private async updateProjectStatus(
+    id: string,
+    status: 'active' | 'archived' | 'recycled',
+  ) {
+    const store = await this.readStore();
+    const index = store.projects.findIndex((project) => project.id === id);
+    if (index < 0) {
+      throw new NotFoundException(`Project ${id} not found`);
+    }
+
+    store.projects[index] = this.normalizeProjectRecord({
+      ...store.projects[index],
+      status,
+    });
+    store.projects = this.sortProjects(store.projects);
+    await this.writeStore(store);
+    return store.projects.find((project) => project.id === id)!;
   }
 
   private normalizeRiskItems(report: PmWeeklyReportRecord): RiskItem[] {
@@ -398,6 +461,7 @@ export class PmReportsService {
       annotationType: nextProject.annotationType,
       plannedQty: nextProject.plannedQty,
       qtyUnit: nextProject.qtyUnit,
+      contractAmount: nextProject.contractAmount,
       budgetTotal: nextProject.budgetTotal,
       supplierName: shouldSyncSupplier ? nextProject.defaultSupplier : report.supplierName,
       updatedAt: new Date().toISOString(),
@@ -423,6 +487,7 @@ export class PmReportsService {
       annotationType: project.annotationType,
       plannedQty: project.plannedQty,
       qtyUnit: project.qtyUnit,
+      contractAmount: project.contractAmount,
       budgetTotal: project.budgetTotal,
       weekStart: payload.weekStart,
       progressPct: payload.progressPct,

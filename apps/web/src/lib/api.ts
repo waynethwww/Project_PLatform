@@ -52,6 +52,8 @@ export type DashboardFilters = {
   curveType?: string;
 };
 
+export type ProjectStatus = 'active' | 'archived' | 'recycled';
+
 export type ProjectOption = {
   id: string;
   name: string;
@@ -60,8 +62,10 @@ export type ProjectOption = {
   annotationType: string;
   plannedQty: number;
   qtyUnit: string;
+  contractAmount: number;
   budgetTotal: number;
   defaultSupplier: string;
+  status: ProjectStatus;
 };
 
 export type ProjectPayload = ProjectOption;
@@ -85,6 +89,7 @@ export type PmWeeklyReport = {
   annotationType: string;
   plannedQty: number;
   qtyUnit: string;
+  contractAmount: number;
   budgetTotal: number;
   weekStart: string;
   progressPct: number;
@@ -129,6 +134,7 @@ export type PmWeeklyReportPayload = Omit<
   | 'annotationType'
   | 'plannedQty'
   | 'qtyUnit'
+  | 'contractAmount'
   | 'budgetTotal'
   | 'createdAt'
   | 'updatedAt'
@@ -209,6 +215,24 @@ export async function updateProject(id: string, payload: ProjectPayload) {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+  });
+}
+
+export async function archiveProject(id: string) {
+  return request<ProjectOption>(`/pm-weekly-reports/projects/${id}/archive`, {
+    method: 'POST',
+  });
+}
+
+export async function recycleProject(id: string) {
+  return request<ProjectOption>(`/pm-weekly-reports/projects/${id}/recycle`, {
+    method: 'POST',
+  });
+}
+
+export async function restoreProject(id: string) {
+  return request<ProjectOption>(`/pm-weekly-reports/projects/${id}/restore`, {
+    method: 'POST',
   });
 }
 

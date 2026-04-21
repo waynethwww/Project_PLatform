@@ -66,10 +66,18 @@ export class UpsertProjectDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  contractAmount!: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
   budgetTotal!: number;
 
   @IsString()
   defaultSupplier!: string;
+
+  @IsIn(['active', 'archived', 'recycled'])
+  status!: 'active' | 'archived' | 'recycled';
 }
 
 export class UpsertPmWeeklyReportDto {

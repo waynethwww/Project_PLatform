@@ -1,3 +1,5 @@
+export type ProjectStatus = 'active' | 'archived' | 'recycled';
+
 export type ProjectOption = {
   id: string;
   name: string;
@@ -6,8 +8,10 @@ export type ProjectOption = {
   annotationType: string;
   plannedQty: number;
   qtyUnit: string;
+  contractAmount: number;
   budgetTotal: number;
   defaultSupplier: string;
+  status: ProjectStatus;
 };
 
 export type ReportStatus = 'draft' | 'submitted';
@@ -33,6 +37,7 @@ export type PmWeeklyReportRecord = {
   annotationType: string;
   plannedQty: number;
   qtyUnit: string;
+  contractAmount: number;
   budgetTotal: number;
   weekStart: string;
   progressPct: number;

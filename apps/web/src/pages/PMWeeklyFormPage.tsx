@@ -1,6 +1,8 @@
-import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 
+import { AppSelect } from '../components/AppSelect';
 import {
+  archiveProject,
   createProject,
   createPmWeeklyReport,
   deletePmWeeklyReport,
@@ -9,12 +11,15 @@ import {
   PmWeeklyReportPayload,
   ProjectOption,
   RiskItem,
+  recycleProject,
+  restoreProject,
   updateProject,
   updatePmWeeklyReport,
 } from '../lib/api';
 
 type FormState = PmWeeklyReportPayload;
 type ProjectEditorMode = 'create' | 'edit';
+type ProjectLifecycleAction = 'archive' | 'recycle' | 'restore';
 type NumericInputProps = {
   value: number;
   onValueChange: (value: number) => void;
@@ -22,7 +27,53 @@ type NumericInputProps = {
   min?: number;
   max?: number;
   step?: number | string;
+  emptyWhenZero?: boolean;
 };
+
+type ComboInputProps = {
+  value: string;
+  options: Array<{
+    label: string;
+    keywords?: string[];
+  }>;
+  placeholder?: string;
+  ariaLabel?: string;
+  onChange: (value: string) => void;
+};
+
+type PendingProjectAction = {
+  type: 'archive' | 'recycle';
+  project: ProjectOption;
+} | null;
+
+const PROJECT_MANAGER_OPTIONS = [
+  { label: '刘兴祖', keywords: ['liuxingzu', 'lxz', 'liu', 'xing', 'zu'] },
+  { label: '王天浩', keywords: ['wangtianhao', 'wth', 'wang', 'tian', 'hao'] },
+  { label: '贾金鹏', keywords: ['jiajinpeng', 'jjp', 'jia', 'jin', 'peng'] },
+  { label: '郑威格', keywords: ['zhengweige', 'zwg', 'zheng', 'wei', 'ge'] },
+  { label: '张艺缤', keywords: ['zhangyibin', 'zyb', 'zhang', 'yi', 'bin'] },
+  { label: '李仕伟', keywords: ['lishiwei', 'lsw', 'li', 'shi', 'wei'] },
+  { label: '冯德隆', keywords: ['fengdelong', 'fdl', 'feng', 'de', 'long'] },
+  { label: '闫成成', keywords: ['yanchengcheng', 'ycc', 'yan', 'cheng'] },
+  { label: '刘宗岩', keywords: ['liuzongyan', 'lzy', 'liu', 'zong', 'yan'] },
+  { label: '刘紫煜', keywords: ['liuziyu', 'lzy', 'liu', 'zi', 'yu'] },
+  { label: '王聪', keywords: ['wangcong', 'wc', 'wang', 'cong'] },
+];
+
+const ANNOTATION_TYPE_OPTIONS = [
+  { label: '点云分割', keywords: ['dianyunfenge', 'dyfg', 'dianyun', 'fenge', 'pointcloud'] },
+  { label: '2D框', keywords: ['2d', '2dkuang', 'erweikuang', 'ewk'] },
+  { label: '3D框', keywords: ['3d', '3dkuang', 'sanweikuang', 'swk'] },
+  { label: '23D融合', keywords: ['23d', '23dronghe', 'ronghe', 'rh'] },
+  { label: '4D车道线', keywords: ['4d', '4dchedaoxian', 'cdx', 'chedao', 'xian'] },
+  { label: '分类', keywords: ['fenlei', 'fl'] },
+  { label: '视频', keywords: ['shipin', 'sp'] },
+  { label: '语音', keywords: ['yuyin', 'yy'] },
+  { label: '采集', keywords: ['caiji', 'cj'] },
+];
+
+const NO_RISK_DESCRIPTION = '当前项目暂无明确风险，按常规节奏持续跟进即可。';
+const NO_RISK_ACTION = '保持例行跟踪与周会同步，如出现异常再补充风险项。';
 
 const fallbackProject: ProjectOption = {
   id: 'temp-project',
@@ -32,22 +83,25 @@ const fallbackProject: ProjectOption = {
   annotationType: '未配置',
   plannedQty: 0,
   qtyUnit: '项',
+  contractAmount: 0,
   budgetTotal: 0,
   defaultSupplier: '未配置',
+  status: 'active',
 };
 
 function createEmptyProject(): ProjectOption {
-  const suffix = Date.now().toString().slice(-6);
   return {
-    id: `P${suffix}`,
+    id: '',
     name: '',
     pmName: '',
-    curveType: '一曲线',
+    curveType: '',
     annotationType: '',
     plannedQty: 0,
-    qtyUnit: '项',
+    qtyUnit: '',
+    contractAmount: 0,
     budgetTotal: 0,
     defaultSupplier: '',
+    status: 'active',
   };
 }
 
@@ -64,6 +118,10 @@ function isCurve1Project(curveType: string) {
 }
 
 function normalizeProjectOption(project: ProjectOption): ProjectOption {
+  if (!project.curveType) {
+    return project;
+  }
+
   if (isCurve1Project(project.curveType)) {
     return project;
   }
@@ -72,7 +130,7 @@ function normalizeProjectOption(project: ProjectOption): ProjectOption {
     ...project,
     annotationType: '',
     plannedQty: 0,
-    qtyUnit: '人天',
+    qtyUnit: '',
     defaultSupplier: '',
   };
 }
@@ -146,12 +204,12 @@ function normalizeRiskItems(
   return [
     createRiskItem(
       {
-        level: fallback.riskLevel,
-        title: fallback.blockerTitle,
-        status: fallback.blockerStatus,
-        dueDate: fallback.blockerDueDate,
-        description: fallback.riskDesc,
-        action: fallback.suggestedAction,
+        level: '绿',
+        title: '',
+        status: 'closed',
+        dueDate: fallback.weekStart,
+        description: NO_RISK_DESCRIPTION,
+        action: NO_RISK_ACTION,
       },
       fallback.weekStart,
     ),
@@ -205,6 +263,32 @@ function getWeekStart() {
   const monday = new Date(now);
   monday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
   return toDateInputValue(monday);
+}
+
+function lifecycleActionLabel(action: 'archive' | 'recycle') {
+  return action === 'archive' ? '归档项目' : '移入回收站';
+}
+
+function lifecycleActionDescription(action: 'archive' | 'recycle', projectName: string) {
+  if (action === 'archive') {
+    return `${projectName} 归档后将移出当前可填报项目列表，但仍可在归档管理中随时恢复。`;
+  }
+
+  return `${projectName} 移入回收站后将从当前列表隐藏，但数据不会被物理删除，后续可在回收站中一键还原。`;
+}
+
+function RestoreIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M6.2 6.1V2.9L2.8 6.3l3.4 3.3V6.9h4.2a4.1 4.1 0 1 1-3.15 6.73"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 function createDefaultPayload(
@@ -418,15 +502,28 @@ function normalizeNumericValue(
 }
 
 function NumericInput(props: NumericInputProps) {
-  const { value, onValueChange, allowDecimal = false, min, max, step } = props;
+  const {
+    value,
+    onValueChange,
+    allowDecimal = false,
+    min,
+    max,
+    step,
+    emptyWhenZero = false,
+  } = props;
   const [text, setText] = useState(String(value));
   const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
     if (!isEditing) {
+      if (emptyWhenZero && value === 0) {
+        setText('');
+        return;
+      }
+
       setText(String(value));
     }
-  }, [isEditing, value]);
+  }, [emptyWhenZero, isEditing, value]);
 
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
     const next = event.target.value;
@@ -447,6 +544,11 @@ function NumericInput(props: NumericInputProps) {
     setIsEditing(false);
     const normalized = normalizeNumericValue(text, allowDecimal, min, max);
     onValueChange(normalized);
+    if (emptyWhenZero && normalized === 0) {
+      setText('');
+      return;
+    }
+
     setText(String(normalized));
   }
 
@@ -463,6 +565,101 @@ function NumericInput(props: NumericInputProps) {
   );
 }
 
+function ComboInput(props: ComboInputProps) {
+  const { value, options, placeholder, ariaLabel, onChange } = props;
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+
+  const filteredOptions = useMemo(() => {
+    const keyword = value.trim().toLowerCase();
+    if (!keyword) {
+      return options;
+    }
+
+    return options.filter((option) => {
+      const haystacks = [option.label, ...(option.keywords || [])].map((item) =>
+        item.toLowerCase(),
+      );
+      return haystacks.some((item) => item.includes(keyword));
+    });
+  }, [options, value]);
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
+
+  function handleSelect(nextValue: string) {
+    onChange(nextValue);
+    setOpen(false);
+  }
+
+  return (
+    <div
+      ref={rootRef}
+      className={`pm-combo ${open ? 'is-open' : ''}`}
+    >
+      <div className="pm-combo__control">
+        <input
+          value={value}
+          placeholder={placeholder}
+          aria-label={ariaLabel}
+          onFocus={() => setOpen(true)}
+          onChange={(event) => {
+            onChange(event.target.value);
+            setOpen(true);
+          }}
+        />
+        <button
+          type="button"
+          className="pm-combo__toggle"
+          aria-label={ariaLabel ? `${ariaLabel}下拉选项` : '展开下拉选项'}
+          onClick={() => setOpen((current) => !current)}
+        >
+          <span className="pm-combo__chevron" aria-hidden="true" />
+        </button>
+      </div>
+      {open ? (
+        <div className="pm-combo__menu" role="listbox" aria-label={ariaLabel}>
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option) => (
+              <button
+                key={option.label}
+                type="button"
+                className={`pm-combo__option ${option.label === value ? 'is-selected' : ''}`}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  handleSelect(option.label);
+                }}
+              >
+                {option.label}
+              </button>
+            ))
+          ) : (
+            <div className="pm-combo__empty">无匹配项，可直接输入新值</div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function PMWeeklyFormPage() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [reports, setReports] = useState<PmWeeklyReport[]>([]);
@@ -475,6 +672,23 @@ export function PMWeeklyFormPage() {
   const [projectForm, setProjectForm] = useState<ProjectOption>(createEmptyProject());
   const [projectStatus, setProjectStatus] = useState('可新增项目或调整当前项目经理');
   const [isProjectSaving, setIsProjectSaving] = useState(false);
+  const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [isRecycleModalOpen, setIsRecycleModalOpen] = useState(false);
+  const [pendingProjectAction, setPendingProjectAction] = useState<PendingProjectAction>(null);
+
+  const activeProjects = useMemo(
+    () => projects.filter((project) => project.status === 'active'),
+    [projects],
+  );
+  const archivedProjects = useMemo(
+    () => projects.filter((project) => project.status === 'archived'),
+    [projects],
+  );
+  const recycledProjects = useMemo(
+    () => projects.filter((project) => project.status === 'recycled'),
+    [projects],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -502,7 +716,10 @@ export function PMWeeklyFormPage() {
           setProjectMode('edit');
           setProjectStatus(`已载入 ${initialProject.name} 主数据，可调整项目经理`);
         } else {
-          const firstProject = nextProjects[0] || fallbackProject;
+          const firstProject =
+            nextProjects.find((project) => project.status === 'active') ||
+            nextProjects[0] ||
+            fallbackProject;
           setForm(createDefaultPayload(firstProject));
           setDraftStatus('当前没有填报记录，可创建首个周报草稿');
           setProjectForm(cloneProject(normalizeProjectOption(firstProject)));
@@ -536,6 +753,7 @@ export function PMWeeklyFormPage() {
   const selectedProject =
     normalizeProjectOption(
       projects.find((project) => project.id === form.projectId) ||
+        activeProjects[0] ||
         projects[0] ||
         fallbackProject,
     );
@@ -547,12 +765,32 @@ export function PMWeeklyFormPage() {
   }, [projectMode, selectedProject]);
 
   useEffect(() => {
+    if (isProjectModalOpen && projectMode === 'create') {
+      setProjectForm(createEmptyProject());
+      setProjectStatus('新增项目模式：保存后即可在周填报中选择该项目');
+    }
+  }, [isProjectModalOpen, projectMode]);
+
+  useEffect(() => {
     setForm((current) => normalizeFormByCurveType(selectedProject, current));
   }, [selectedProject.curveType, selectedProject.id]);
 
   const activeReport = reports.find((report) => report.id === activeReportId) || null;
   const isSelectedCurve1 = isCurve1Project(selectedProject.curveType);
   const isProjectFormCurve1 = isCurve1Project(projectForm.curveType);
+  const hasProjectCurveSelected = Boolean(projectForm.curveType);
+  const trimmedProjectFormId = projectForm.id.trim();
+  const isProjectIdDuplicate = useMemo(
+    () =>
+      Boolean(trimmedProjectFormId) &&
+      projects.some(
+        (project) =>
+          project.id === trimmedProjectFormId &&
+          (projectMode === 'create' || project.id !== selectedProject.id),
+      ),
+    [projectMode, projects, selectedProject.id, trimmedProjectFormId],
+  );
+  const isProjectIdAvailable = Boolean(trimmedProjectFormId) && !isProjectIdDuplicate;
   const primaryRisk = useMemo(
     () =>
       getPrimaryRiskItem(
@@ -655,7 +893,7 @@ export function PMWeeklyFormPage() {
           ? '风险描述、阻塞事项、建议动作已确认'
           : '风险描述、阻塞事项、部署动作已确认',
         done:
-          form.riskItems.length > 0 &&
+          form.riskItems.length === 0 ||
           form.riskItems.every(
             (item) =>
               item.description.trim().length > 0 &&
@@ -682,6 +920,11 @@ export function PMWeeklyFormPage() {
         { label: '项目编号', value: selectedProject.id, hint: '只读' },
         { label: '项目经理', value: selectedProject.pmName, hint: '自动带出' },
         { label: '曲线类型', value: selectedProject.curveType, hint: '只读' },
+        {
+          label: '合同金额',
+          value: toWan(selectedProject.contractAmount),
+          hint: '主数据',
+        },
         {
           label: isSelectedCurve1 ? '预算总额' : '预算总人天',
           value: isSelectedCurve1
@@ -903,21 +1146,85 @@ export function PMWeeklyFormPage() {
 
   function removeRiskItem(riskId: string) {
     setForm((current) => {
-      if (current.riskItems.length <= 1) {
-        return current;
-      }
-
       return {
         ...current,
         riskItems: current.riskItems.filter((item) => item.id !== riskId),
       };
     });
-    setDraftStatus('已删除一条风险项');
+    setDraftStatus('已删除风险项；若当前无风险，系统会按无风险状态保存');
+  }
+
+  async function syncProjectViews(targetProjectId?: string) {
+    const bootstrap = await getPmWeeklyReportsBootstrap();
+    setProjects(bootstrap.projects);
+    setReports(bootstrap.reports);
+
+    const nextActiveProjects = bootstrap.projects.filter(
+      (project) => project.status === 'active',
+    );
+    const nextProject =
+      (targetProjectId
+        ? bootstrap.projects.find((project) => project.id === targetProjectId)
+        : null) ||
+      nextActiveProjects[0] ||
+      bootstrap.projects[0] ||
+      fallbackProject;
+
+    setActiveReportId(null);
+    setForm(createDefaultPayload(nextProject, form.weekStart || getWeekStart()));
+    return nextProject;
+  }
+
+  async function handleProjectLifecycle(action: ProjectLifecycleAction, projectId: string) {
+    setIsProjectSaving(true);
+    try {
+      const project =
+        projects.find((item) => item.id === projectId) || fallbackProject;
+
+      if (action === 'archive') {
+        await archiveProject(projectId);
+        const nextProject = await syncProjectViews();
+        setDraftStatus(`${project.name} 已归档，当前切换到 ${nextProject.name}`);
+      } else if (action === 'recycle') {
+        await recycleProject(projectId);
+        const nextProject = await syncProjectViews();
+        setDraftStatus(`${project.name} 已移入回收站，当前切换到 ${nextProject.name}`);
+      } else {
+        await restoreProject(projectId);
+        const nextProject = await syncProjectViews(projectId);
+        setDraftStatus(`${project.name} 已恢复，可重新继续填报`);
+      }
+    } catch {
+      setDraftStatus('项目状态更新失败，请检查本地后端服务');
+    } finally {
+      setIsProjectSaving(false);
+    }
+  }
+
+  function openProjectActionConfirm(action: 'archive' | 'recycle') {
+    if (selectedProject.id === fallbackProject.id || selectedProject.status !== 'active') {
+      return;
+    }
+
+    setPendingProjectAction({
+      type: action,
+      project: selectedProject,
+    });
+  }
+
+  async function confirmProjectAction() {
+    if (!pendingProjectAction) {
+      return;
+    }
+
+    const nextAction = pendingProjectAction;
+    setPendingProjectAction(null);
+    await handleProjectLifecycle(nextAction.type, nextAction.project.id);
   }
 
   function handleProjectChange(projectId: string) {
     const nextProject =
-      projects.find((project) => project.id === projectId) || fallbackProject;
+      activeProjects.find((project) => project.id === projectId) || fallbackProject;
     setForm((current) => ({
       ...createDefaultPayload(nextProject, current.weekStart),
       status: 'draft',
@@ -944,12 +1251,17 @@ export function PMWeeklyFormPage() {
     setProjectMode('create');
     setProjectForm(createEmptyProject());
     setProjectStatus('新增项目模式：保存后即可在周填报中选择该项目');
+    setIsProjectModalOpen(true);
   }
 
-  function loadSelectedProjectIntoEditor() {
+  function closeProjectModal() {
+    if (isProjectSaving) {
+      return;
+    }
+    setIsProjectModalOpen(false);
     setProjectMode('edit');
     setProjectForm(cloneProject(selectedProject));
-    setProjectStatus(`已载入 ${selectedProject.name}，可调整项目经理和基础信息`);
+    setProjectStatus(`已载入 ${selectedProject.name} 主数据，可继续新增项目`);
   }
 
   function updateProjectField<K extends keyof ProjectOption>(
@@ -971,8 +1283,18 @@ export function PMWeeklyFormPage() {
   }
 
   async function saveProjectDefinition() {
-    if (!projectForm.id.trim() || !projectForm.name.trim() || !projectForm.pmName.trim()) {
-      setProjectStatus('请至少填写项目编号、项目名称、项目经理');
+    if (
+      !projectForm.id.trim() ||
+      !projectForm.name.trim() ||
+      !projectForm.pmName.trim() ||
+      !projectForm.curveType.trim()
+    ) {
+      setProjectStatus('请至少填写项目编号、项目名称、项目经理、曲线类型');
+      return;
+    }
+
+    if (isProjectIdDuplicate) {
+      setProjectStatus('项目编号已存在，请更换后再保存');
       return;
     }
 
@@ -983,23 +1305,25 @@ export function PMWeeklyFormPage() {
         id: projectForm.id.trim(),
         name: projectForm.name.trim(),
         pmName: projectForm.pmName.trim(),
+        curveType: projectForm.curveType.trim(),
         annotationType: projectForm.annotationType.trim(),
         qtyUnit: projectForm.qtyUnit.trim(),
         defaultSupplier: projectForm.defaultSupplier.trim(),
+        status: projectForm.status,
       });
 
-      if (projectMode === 'create') {
-        await createProject(normalizedProject);
-      } else {
-        await updateProject(projectForm.id, normalizedProject);
-      }
+      const savedProject =
+        projectMode === 'create'
+          ? await createProject(normalizedProject)
+          : await updateProject(projectForm.id, normalizedProject);
 
       const bootstrap = await getPmWeeklyReportsBootstrap();
       setProjects(bootstrap.projects);
       setReports(bootstrap.reports);
 
       const syncedProject =
-        bootstrap.projects.find((project) => project.id === projectForm.id) ||
+        bootstrap.projects.find((project) => project.id === savedProject.id) ||
+        normalizeProjectOption(savedProject) ||
         bootstrap.projects[0] ||
         fallbackProject;
 
@@ -1007,6 +1331,12 @@ export function PMWeeklyFormPage() {
         setActiveReportId(null);
         setForm(createDefaultPayload(syncedProject, form.weekStart || getWeekStart()));
         setDraftStatus(`已新增项目 ${syncedProject.name}，可继续填写首个周报`);
+        setIsProjectModalOpen(false);
+        if (typeof window !== 'undefined') {
+          window.requestAnimationFrame(() =>
+            window.scrollTo({ top: 0, behavior: 'smooth' }),
+          );
+        }
       } else {
         const syncedActiveReport = activeReportId
           ? bootstrap.reports.find((report) => report.id === activeReportId)
@@ -1099,7 +1429,7 @@ export function PMWeeklyFormPage() {
         setForm(reportToPayload(nextReports[0]));
         setDraftStatus(`已删除记录，当前切换到 ${nextReports[0].projectName}`);
       } else {
-        const firstProject = projects[0] || fallbackProject;
+        const firstProject = activeProjects[0] || projects[0] || fallbackProject;
         setActiveReportId(null);
         setForm(createDefaultPayload(firstProject));
         setDraftStatus('已删除最后一条记录，可重新新建草稿');
@@ -1120,6 +1450,9 @@ export function PMWeeklyFormPage() {
           <p className="pm-page-header__sub">固定信息抽离后，仅填本周变化项</p>
         </div>
         <div className="pm-page-actions">
+          <button className="pm-btn pm-btn--light pm-btn--accent" onClick={beginCreateProject}>
+            新增项目
+          </button>
           <button className="pm-btn pm-btn--light" onClick={() => (window.location.hash = '#/weekly-report')}>
             返回
           </button>
@@ -1145,18 +1478,18 @@ export function PMWeeklyFormPage() {
 
       <section className="pm-context-bar">
         <div className="pm-context-grid">
-          <label className="pm-field">
+          <label className="pm-field pm-field--project-picker">
             <span className="pm-field__label">项目名称</span>
-            <select
+            <AppSelect
               value={form.projectId}
-              onChange={(event) => handleProjectChange(event.target.value)}
-            >
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
+              onChange={handleProjectChange}
+              ariaLabel="项目名称"
+              size="compact"
+              options={activeProjects.map((project) => ({
+                value: project.id,
+                label: project.name,
+              }))}
+            />
           </label>
           <label className="pm-field">
             <span className="pm-field__label">周期</span>
@@ -1167,9 +1500,39 @@ export function PMWeeklyFormPage() {
             />
           </label>
           <div className="pm-context-status">
-            <span className={`pm-badge pm-badge--${healthLabel.tone}`}>健康状态：{healthLabel.text}</span>
-            <span className="pm-badge">{activeReport ? recordStatusLabel(activeReport.status) : '未保存'}</span>
-            <span className="pm-badge">草稿状态：{isLoading ? '加载中...' : draftStatus}</span>
+            <div className="pm-context-meta">
+              <span className={`pm-badge pm-badge--${healthLabel.tone}`}>健康状态：{healthLabel.text}</span>
+              <span className="pm-badge">{activeReport ? recordStatusLabel(activeReport.status) : '未保存'}</span>
+              <span className="pm-badge">草稿状态：{isLoading ? '加载中...' : draftStatus}</span>
+            </div>
+            <div className="pm-context-actions">
+              <button className="pm-mini-btn pm-mini-btn--soft" onClick={() => setIsArchiveModalOpen(true)}>
+                归档管理
+                {archivedProjects.length > 0 ? <span className="pm-mini-btn__count">{archivedProjects.length}</span> : null}
+              </button>
+              <button className="pm-mini-btn pm-mini-btn--soft" onClick={() => setIsRecycleModalOpen(true)}>
+                回收站
+                {recycledProjects.length > 0 ? <span className="pm-mini-btn__count">{recycledProjects.length}</span> : null}
+              </button>
+              {selectedProject.status === 'active' ? (
+                <>
+                  <button
+                    className="pm-mini-btn"
+                    onClick={() => openProjectActionConfirm('archive')}
+                    disabled={isProjectSaving || selectedProject.id === fallbackProject.id}
+                  >
+                    归档项目
+                  </button>
+                  <button
+                    className="pm-mini-btn pm-mini-btn--danger"
+                    onClick={() => openProjectActionConfirm('recycle')}
+                    disabled={isProjectSaving || selectedProject.id === fallbackProject.id}
+                  >
+                    移入回收站
+                  </button>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       </section>
@@ -1386,7 +1749,13 @@ export function PMWeeklyFormPage() {
                   </div>
                 </div>
                 <div className="pm-risk-list">
-                  {form.riskItems.map((item, index) => (
+                  {form.riskItems.length === 0 ? (
+                    <div className="pm-risk-empty">
+                      <strong>当前无风险项</strong>
+                      <span>本项目将按“无风险”策略保存为绿色状态，后续如有异常可再新增。</span>
+                    </div>
+                  ) : (
+                    form.riskItems.map((item, index) => (
                     <section key={item.id} className="pm-risk-card">
                       <div className="pm-risk-card__head">
                         <div>
@@ -1407,7 +1776,6 @@ export function PMWeeklyFormPage() {
                         <button
                           className="pm-mini-btn"
                           onClick={() => removeRiskItem(item.id)}
-                          disabled={form.riskItems.length <= 1}
                         >
                           删除
                         </button>
@@ -1415,37 +1783,41 @@ export function PMWeeklyFormPage() {
                       <div className="pm-entry-grid pm-entry-grid--inner">
                         <label className="pm-field">
                           <span className="pm-field__label">风险等级</span>
-                          <select
+                          <AppSelect
                             value={item.level}
-                            onChange={(event) =>
+                            onChange={(nextValue) =>
                               updateRiskItem(
                                 item.id,
                                 'level',
-                                event.target.value as RiskItem['level'],
+                                nextValue as RiskItem['level'],
                               )
                             }
-                          >
-                            <option value="绿">绿</option>
-                            <option value="黄">黄</option>
-                            <option value="红">红</option>
-                          </select>
+                            ariaLabel={`风险项 ${index + 1} 风险等级`}
+                            options={[
+                              { value: '绿', label: '绿' },
+                              { value: '黄', label: '黄' },
+                              { value: '红', label: '红' },
+                            ]}
+                          />
                         </label>
                         <label className="pm-field">
                           <span className="pm-field__label">阻塞事项状态</span>
-                          <select
+                          <AppSelect
                             value={item.status}
-                            onChange={(event) =>
+                            onChange={(nextValue) =>
                               updateRiskItem(
                                 item.id,
                                 'status',
-                                event.target.value as RiskItem['status'],
+                                nextValue as RiskItem['status'],
                               )
                             }
-                          >
-                            <option value="open">待处理</option>
-                            <option value="watching">跟进中</option>
-                            <option value="closed">已解决</option>
-                          </select>
+                            ariaLabel={`风险项 ${index + 1} 阻塞事项状态`}
+                            options={[
+                              { value: 'open', label: '待处理' },
+                              { value: 'watching', label: '跟进中' },
+                              { value: 'closed', label: '已解决' },
+                            ]}
+                          />
                         </label>
                         <label className="pm-field">
                           <span className="pm-field__label">
@@ -1490,7 +1862,8 @@ export function PMWeeklyFormPage() {
                         </label>
                       </div>
                     </section>
-                  ))}
+                    ))
+                  )}
                 </div>
                 {isSelectedCurve1 ? (
                   <div className="pm-entry-grid">
@@ -1616,126 +1989,6 @@ export function PMWeeklyFormPage() {
           <section className="pm-side-card">
             <div className="pm-side-card__header">
               <div>
-                <p>项目主数据</p>
-                <h3>{projectMode === 'create' ? '新增项目' : '项目信息维护'}</h3>
-              </div>
-              <span className="pm-chip">
-                {projectMode === 'create' ? '新增模式' : '编辑模式'}
-              </span>
-            </div>
-            <div className="pm-project-form">
-              <label className="pm-field">
-                <span className="pm-field__label">项目编号</span>
-                <input
-                  value={projectForm.id}
-                  onChange={(event) => updateProjectField('id', event.target.value)}
-                  disabled={projectMode === 'edit'}
-                />
-              </label>
-              <label className="pm-field">
-                <span className="pm-field__label">项目名称</span>
-                <input
-                  value={projectForm.name}
-                  onChange={(event) => updateProjectField('name', event.target.value)}
-                />
-              </label>
-              <label className="pm-field">
-                <span className="pm-field__label">项目经理</span>
-                <input
-                  value={projectForm.pmName}
-                  onChange={(event) => updateProjectField('pmName', event.target.value)}
-                />
-              </label>
-              <label className="pm-field">
-                <span className="pm-field__label">曲线类型</span>
-                <select
-                  value={projectForm.curveType}
-                  onChange={(event) => updateProjectField('curveType', event.target.value)}
-                >
-                  <option value="一曲线">一曲线</option>
-                  <option value="二曲线">二曲线</option>
-                  <option value="三曲线">三曲线</option>
-                </select>
-              </label>
-              {isProjectFormCurve1 ? (
-                <>
-                  <label className="pm-field">
-                    <span className="pm-field__label">标注类型</span>
-                    <input
-                      value={projectForm.annotationType}
-                      onChange={(event) =>
-                        updateProjectField('annotationType', event.target.value)
-                      }
-                    />
-                  </label>
-                  <label className="pm-field">
-                    <span className="pm-field__label">计划总量</span>
-                    <NumericInput
-                      value={projectForm.plannedQty}
-                      onValueChange={(value) => updateProjectField('plannedQty', value)}
-                    />
-                  </label>
-                  <label className="pm-field">
-                    <span className="pm-field__label">数量单位</span>
-                    <input
-                      value={projectForm.qtyUnit}
-                      onChange={(event) => updateProjectField('qtyUnit', event.target.value)}
-                    />
-                  </label>
-                </>
-              ) : (
-                <div className="pm-auto-box pm-auto-box--hint pm-field--full">
-                  <span>私有化部署项目</span>
-                  <strong>不维护标注类型、数量单位、默认供应商</strong>
-                  <small>二/三曲线只维护项目经理、预算总人天和后续部署进度，周填报按里程碑与人天口径汇报。</small>
-                </div>
-              )}
-              <label className="pm-field">
-                <span className="pm-field__label">
-                  {isProjectFormCurve1 ? '预算总额' : '预算总人天'}
-                </span>
-                <NumericInput
-                  allowDecimal
-                  step="0.1"
-                  value={projectForm.budgetTotal}
-                  onValueChange={(value) => updateProjectField('budgetTotal', value)}
-                />
-              </label>
-              {isProjectFormCurve1 ? (
-                <label className="pm-field pm-field--full">
-                  <span className="pm-field__label">默认供应商</span>
-                  <input
-                    value={projectForm.defaultSupplier}
-                    onChange={(event) =>
-                      updateProjectField('defaultSupplier', event.target.value)
-                    }
-                  />
-                </label>
-              ) : null}
-            </div>
-            <div className="pm-actions pm-actions--stack">
-              <button className="pm-btn pm-btn--light" onClick={beginCreateProject}>
-                新增项目
-              </button>
-              <button className="pm-btn pm-btn--light" onClick={loadSelectedProjectIntoEditor}>
-                载入当前项目
-              </button>
-              <button
-                className="pm-btn pm-btn--primary"
-                onClick={() => void saveProjectDefinition()}
-                disabled={isProjectSaving}
-              >
-                {isProjectSaving ? '保存中...' : projectMode === 'create' ? '保存新项目' : '保存项目调整'}
-              </button>
-            </div>
-            <div className="pm-side-note">
-              {projectStatus}。调整项目经理后，会同步更新该项目现有周报中的负责人展示口径。
-            </div>
-          </section>
-
-          <section className="pm-side-card">
-            <div className="pm-side-card__header">
-              <div>
                 <p>记录中心</p>
                 <h3>本地周报记录</h3>
               </div>
@@ -1857,6 +2110,312 @@ export function PMWeeklyFormPage() {
           </section>
         </aside>
       </div>
+
+      {isProjectModalOpen ? (
+        <div className="pm-modal" role="dialog" aria-modal="true" aria-labelledby="pm-project-modal-title">
+          <div className="pm-modal__backdrop" onClick={closeProjectModal} />
+          <section className="pm-modal__panel">
+            <div className="pm-modal__header">
+              <div>
+                <p>项目主数据</p>
+                <h3 id="pm-project-modal-title">新增项目</h3>
+              </div>
+              <button className="pm-mini-btn" onClick={closeProjectModal} disabled={isProjectSaving}>
+                关闭
+              </button>
+            </div>
+            <div className="pm-project-form">
+              <label className="pm-field">
+                <span className="pm-field__label">项目编号</span>
+                <div className="pm-id-field">
+                  <input
+                    value={projectForm.id}
+                    onChange={(event) => updateProjectField('id', event.target.value)}
+                  />
+                  {isProjectIdAvailable ? (
+                    <span className="pm-id-field__status pm-id-field__status--ok">✓</span>
+                  ) : null}
+                </div>
+                {trimmedProjectFormId ? (
+                  isProjectIdDuplicate ? (
+                    <span className="pm-field__hint pm-field__hint--danger">
+                      项目编号已存在，请更换后再保存
+                    </span>
+                  ) : (
+                    <span className="pm-field__hint pm-field__hint--ok">
+                      项目编号可用
+                    </span>
+                  )
+                ) : (
+                  <span className="pm-field__hint">请输入唯一的项目编号</span>
+                )}
+              </label>
+              <label className="pm-field">
+                <span className="pm-field__label">项目名称</span>
+                <input
+                  value={projectForm.name}
+                  onChange={(event) => updateProjectField('name', event.target.value)}
+                />
+              </label>
+              <label className="pm-field">
+                <span className="pm-field__label">项目经理</span>
+                <ComboInput
+                  value={projectForm.pmName}
+                  options={PROJECT_MANAGER_OPTIONS}
+                  placeholder="可输入或选择项目经理"
+                  ariaLabel="项目经理"
+                  onChange={(value) => updateProjectField('pmName', value)}
+                />
+              </label>
+              <label className="pm-field">
+                <span className="pm-field__label">曲线类型</span>
+                <AppSelect
+                  value={projectForm.curveType}
+                  onChange={(nextValue) => updateProjectField('curveType', nextValue)}
+                  ariaLabel="曲线类型"
+                  placeholder="请选择曲线类型"
+                  options={[
+                    { value: '一曲线', label: '一曲线' },
+                    { value: '二曲线', label: '二曲线' },
+                    { value: '三曲线', label: '三曲线' },
+                  ]}
+                />
+              </label>
+              <label className="pm-field">
+                <span className="pm-field__label">合同金额</span>
+                <NumericInput
+                  allowDecimal
+                  step="0.1"
+                  value={projectForm.contractAmount}
+                  emptyWhenZero
+                  onValueChange={(value) => updateProjectField('contractAmount', value)}
+                />
+              </label>
+              {isProjectFormCurve1 ? (
+                <>
+                  <label className="pm-field">
+                    <span className="pm-field__label">标注类型</span>
+                    <ComboInput
+                      value={projectForm.annotationType}
+                      options={ANNOTATION_TYPE_OPTIONS}
+                      placeholder="可输入或选择标注类型"
+                      ariaLabel="标注类型"
+                      onChange={(value) => updateProjectField('annotationType', value)}
+                    />
+                  </label>
+                  <label className="pm-field">
+                    <span className="pm-field__label">计划总量</span>
+                    <NumericInput
+                      value={projectForm.plannedQty}
+                      emptyWhenZero
+                      onValueChange={(value) => updateProjectField('plannedQty', value)}
+                    />
+                  </label>
+                  <label className="pm-field">
+                    <span className="pm-field__label">数量单位</span>
+                    <input
+                      value={projectForm.qtyUnit}
+                      onChange={(event) => updateProjectField('qtyUnit', event.target.value)}
+                    />
+                  </label>
+                </>
+              ) : hasProjectCurveSelected ? (
+                <div className="pm-auto-box pm-auto-box--hint pm-field--full">
+                  <span>私有化部署项目</span>
+                  <strong>不维护标注类型、数量单位、默认供应商</strong>
+                  <small>二/三曲线维护合同金额、预算总人天和后续部署进度，周填报按里程碑与人天口径汇报。</small>
+                </div>
+              ) : null}
+              <label className="pm-field">
+                <span className="pm-field__label">
+                  {isProjectFormCurve1
+                    ? '预算总额'
+                    : hasProjectCurveSelected
+                      ? '预算总人天'
+                      : '预算总额 / 预算总人天'}
+                </span>
+                <NumericInput
+                  allowDecimal
+                  step="0.1"
+                  value={projectForm.budgetTotal}
+                  emptyWhenZero
+                  onValueChange={(value) => updateProjectField('budgetTotal', value)}
+                />
+              </label>
+              {isProjectFormCurve1 ? (
+                <label className="pm-field pm-field--full">
+                  <span className="pm-field__label">默认供应商</span>
+                  <input
+                    value={projectForm.defaultSupplier}
+                    onChange={(event) =>
+                      updateProjectField('defaultSupplier', event.target.value)
+                    }
+                  />
+                </label>
+              ) : null}
+            </div>
+            <div className="pm-actions pm-actions--modal">
+              <button className="pm-btn pm-btn--light" onClick={closeProjectModal} disabled={isProjectSaving}>
+                取消
+              </button>
+              <button
+                className="pm-btn pm-btn--primary"
+                onClick={() => void saveProjectDefinition()}
+                disabled={isProjectSaving || isProjectIdDuplicate}
+              >
+                {isProjectSaving ? '保存中...' : '保存新项目'}
+              </button>
+            </div>
+            <div className="pm-side-note">
+              {projectStatus}。保存成功后将自动切换到新项目，并刷新当前周填报页面。
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {pendingProjectAction ? (
+        <div className="pm-modal" role="dialog" aria-modal="true" aria-labelledby="pm-project-action-title">
+          <div className="pm-modal__backdrop" onClick={() => setPendingProjectAction(null)} />
+          <section className="pm-modal__panel pm-modal__panel--confirm">
+            <div className="pm-modal__header">
+              <div>
+                <p>项目操作确认</p>
+                <h3 id="pm-project-action-title">{lifecycleActionLabel(pendingProjectAction.type)}</h3>
+              </div>
+              <button
+                className="pm-mini-btn"
+                onClick={() => setPendingProjectAction(null)}
+                disabled={isProjectSaving}
+              >
+                取消
+              </button>
+            </div>
+            <div className="pm-confirm-card">
+              <span className="pm-inline-tag pm-inline-tag--warn">请确认后继续</span>
+              <strong>{pendingProjectAction.project.name}</strong>
+              <p>{lifecycleActionDescription(pendingProjectAction.type, pendingProjectAction.project.name)}</p>
+            </div>
+            <div className="pm-actions pm-actions--modal">
+              <button
+                className="pm-btn pm-btn--light"
+                onClick={() => setPendingProjectAction(null)}
+                disabled={isProjectSaving}
+              >
+                再想想
+              </button>
+              <button
+                className={`pm-btn ${pendingProjectAction.type === 'recycle' ? 'pm-btn--danger' : 'pm-btn--primary'}`}
+                onClick={() => void confirmProjectAction()}
+                disabled={isProjectSaving}
+              >
+                {isProjectSaving ? '处理中...' : lifecycleActionLabel(pendingProjectAction.type)}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isArchiveModalOpen ? (
+        <div className="pm-modal" role="dialog" aria-modal="true" aria-labelledby="pm-archive-modal-title">
+          <div className="pm-modal__backdrop" onClick={() => setIsArchiveModalOpen(false)} />
+          <section className="pm-modal__panel pm-modal__panel--manager">
+            <div className="pm-modal__header">
+              <div>
+                <p>项目管理</p>
+                <h3 id="pm-archive-modal-title">归档管理</h3>
+              </div>
+              <button className="pm-mini-btn" onClick={() => setIsArchiveModalOpen(false)}>
+                关闭
+              </button>
+            </div>
+            <div className="pm-manager-summary">
+              <span className="pm-chip">已归档 {archivedProjects.length} 个项目</span>
+              <span className="pm-side-note">归档项目会从当前填报名单移除，可随时恢复到活跃列表。</span>
+            </div>
+            <div className="pm-manager-list">
+              {archivedProjects.length === 0 ? (
+                <div className="pm-records__empty">当前没有已归档项目</div>
+              ) : (
+                archivedProjects.map((project) => (
+                  <article key={project.id} className="pm-manager-item">
+                    <div className="pm-manager-item__body">
+                      <div className="pm-manager-item__top">
+                        <strong>{project.name}</strong>
+                        <span className="pm-badge">已归档</span>
+                      </div>
+                      <div className="pm-manager-item__meta">
+                        <span>{project.id}</span>
+                        <span>{project.curveType || '未配置曲线'}</span>
+                        <span>{project.pmName || '待分配 PM'}</span>
+                      </div>
+                    </div>
+                    <button
+                      className="pm-icon-btn"
+                      onClick={() => void handleProjectLifecycle('restore', project.id)}
+                      disabled={isProjectSaving}
+                      title={`恢复 ${project.name}`}
+                      aria-label={`恢复 ${project.name}`}
+                    >
+                      <RestoreIcon />
+                    </button>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isRecycleModalOpen ? (
+        <div className="pm-modal" role="dialog" aria-modal="true" aria-labelledby="pm-recycle-modal-title">
+          <div className="pm-modal__backdrop" onClick={() => setIsRecycleModalOpen(false)} />
+          <section className="pm-modal__panel pm-modal__panel--manager">
+            <div className="pm-modal__header">
+              <div>
+                <p>项目管理</p>
+                <h3 id="pm-recycle-modal-title">回收站</h3>
+              </div>
+              <button className="pm-mini-btn" onClick={() => setIsRecycleModalOpen(false)}>
+                关闭
+              </button>
+            </div>
+            <div className="pm-manager-summary">
+              <span className="pm-chip">回收站 {recycledProjects.length} 个项目</span>
+              <span className="pm-side-note">移入回收站属于假删，数据仍保留，可通过右侧图标直接恢复。</span>
+            </div>
+            <div className="pm-manager-list">
+              {recycledProjects.length === 0 ? (
+                <div className="pm-records__empty">当前回收站为空</div>
+              ) : (
+                recycledProjects.map((project) => (
+                  <article key={project.id} className="pm-manager-item pm-manager-item--recycle">
+                    <div className="pm-manager-item__body">
+                      <div className="pm-manager-item__top">
+                        <strong>{project.name}</strong>
+                        <span className="pm-badge pm-badge--warn">回收站</span>
+                      </div>
+                      <div className="pm-manager-item__meta">
+                        <span>{project.id}</span>
+                        <span>{project.curveType || '未配置曲线'}</span>
+                        <span>{project.pmName || '待分配 PM'}</span>
+                      </div>
+                    </div>
+                    <button
+                      className="pm-icon-btn pm-icon-btn--danger"
+                      onClick={() => void handleProjectLifecycle('restore', project.id)}
+                      disabled={isProjectSaving}
+                      title={`恢复 ${project.name}`}
+                      aria-label={`恢复 ${project.name}`}
+                    >
+                      <RestoreIcon />
+                    </button>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

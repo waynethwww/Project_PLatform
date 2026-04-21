@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 
+import { AppSelect } from '../components/AppSelect';
 import {
   DashboardFilters,
   getAlgoTrend,
@@ -1128,22 +1129,16 @@ export function DashboardPage() {
 
   return (
     <div className="dashboard-shell wr-shell">
-      <header className="wr-header">
-        <div className="wr-header__left">
-          <div className="wr-header__icon">📊</div>
-          <div>
-            <h1>AI数据业务 · 管理层汇报</h1>
-            <p>
-              数据口径 {filters.startDate} 至 {filters.endDate} · 页面更新于{' '}
-              {toDateInputValue(new Date())}
-            </p>
-          </div>
+      <section className="wr-meta">
+        <div className="wr-meta__eyebrow">AI数据业务 · 管理层汇报</div>
+        <div className="wr-meta__row">
+          <p className="wr-meta__range">
+            数据口径 {filters.startDate} 至 {filters.endDate} · 页面更新于{' '}
+            {toDateInputValue(new Date())}
+          </p>
+          <div className="wr-meta__focus">🎯 本次重点：本周交付金额 & 成本/预算健康</div>
         </div>
-        <div className="wr-header__right">
-          <div className="wr-header__focus">🎯 本次重点：本周交付金额 & 成本/预算健康</div>
-          <div className="wr-header__date">周汇报视图</div>
-        </div>
-      </header>
+      </section>
 
       <div className="wr-toolbar">
         <div className="wr-toolbar__group">
@@ -1151,9 +1146,9 @@ export function DashboardPage() {
           <button onClick={() => updatePreset('month')}>近一月</button>
           <button onClick={() => updatePreset('quarter')}>近一季度</button>
         </div>
-        <div className="wr-toolbar__group">
-          <label>
-            开始日期
+        <div className="wr-toolbar__group wr-toolbar__group--filters">
+          <label className="wr-toolbar__field wr-toolbar__field--date">
+            <span>开始日期</span>
             <input
               type="date"
               value={filters.startDate}
@@ -1162,8 +1157,8 @@ export function DashboardPage() {
               }
             />
           </label>
-          <label>
-            结束日期
+          <label className="wr-toolbar__field wr-toolbar__field--date">
+            <span>结束日期</span>
             <input
               type="date"
               value={filters.endDate}
@@ -1172,34 +1167,40 @@ export function DashboardPage() {
               }
             />
           </label>
-          <label>
-            曲线类型
-            <select
+          <label className="wr-toolbar__field wr-toolbar__field--select">
+            <span>曲线类型</span>
+            <AppSelect
               value={filters.curveType || ''}
-              onChange={(event) =>
-                setFilters((current) => ({ ...current, curveType: event.target.value }))
+              onChange={(nextValue) =>
+                setFilters((current) => ({ ...current, curveType: nextValue }))
               }
-            >
-              <option value="">全部曲线</option>
-              <option value="一曲线">一曲线</option>
-              <option value="二曲线">二曲线</option>
-              <option value="三曲线">三曲线</option>
-            </select>
+              size="compact"
+              ariaLabel="曲线类型"
+              options={[
+                { value: '', label: '全部曲线' },
+                { value: '一曲线', label: '一曲线' },
+                { value: '二曲线', label: '二曲线' },
+                { value: '三曲线', label: '三曲线' },
+              ]}
+            />
           </label>
-          <label>
-            统计模式
-            <select
+          <label className="wr-toolbar__field wr-toolbar__field--select">
+            <span>统计模式</span>
+            <AppSelect
               value={filters.mode}
-              onChange={(event) =>
+              onChange={(nextValue) =>
                 setFilters((current) => ({
                   ...current,
-                  mode: event.target.value as 'latest' | 'period',
+                  mode: nextValue as 'latest' | 'period',
                 }))
               }
-            >
-              <option value="period">时间区间</option>
-              <option value="latest">最新快照</option>
-            </select>
+              size="compact"
+              ariaLabel="统计模式"
+              options={[
+                { value: 'period', label: '时间区间' },
+                { value: 'latest', label: '最新快照' },
+              ]}
+            />
           </label>
         </div>
         <div className="wr-toolbar__group">

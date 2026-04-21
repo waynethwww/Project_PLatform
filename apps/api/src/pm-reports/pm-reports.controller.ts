@@ -40,6 +40,21 @@ export class PmReportsController {
     return this.pmReportsService.updateProject(id, payload);
   }
 
+  @Post('projects/:id/archive')
+  archiveProject(@Param('id') id: string) {
+    return this.pmReportsService.archiveProject(id);
+  }
+
+  @Post('projects/:id/recycle')
+  recycleProject(@Param('id') id: string) {
+    return this.pmReportsService.recycleProject(id);
+  }
+
+  @Post('projects/:id/restore')
+  restoreProject(@Param('id') id: string) {
+    return this.pmReportsService.restoreProject(id);
+  }
+
   @Get()
   listReports(@Query() query: PmReportsQueryDto) {
     return this.pmReportsService.listReports(query.projectId);
