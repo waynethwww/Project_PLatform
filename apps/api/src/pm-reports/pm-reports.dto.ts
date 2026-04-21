@@ -1,12 +1,37 @@
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsDateString,
   IsIn,
   IsNumber,
   IsOptional,
   IsString,
   Min,
+  ValidateNested,
 } from 'class-validator';
+
+export class RiskItemDto {
+  @IsString()
+  id!: string;
+
+  @IsIn(['绿', '黄', '红'])
+  level!: '绿' | '黄' | '红';
+
+  @IsString()
+  title!: string;
+
+  @IsIn(['open', 'watching', 'closed'])
+  status!: 'open' | 'watching' | 'closed';
+
+  @IsDateString()
+  dueDate!: string;
+
+  @IsString()
+  description!: string;
+
+  @IsString()
+  action!: string;
+}
 
 export class PmReportsQueryDto {
   @IsOptional()
@@ -101,6 +126,11 @@ export class UpsertPmWeeklyReportDto {
 
   @IsString()
   suggestedAction!: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RiskItemDto)
+  riskItems!: RiskItemDto[];
 
   @IsString()
   supplierName!: string;

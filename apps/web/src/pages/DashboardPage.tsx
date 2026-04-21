@@ -105,6 +105,13 @@ function moneyWithUnit(value: number) {
   return `${money(value)} 万`;
 }
 
+function personDays(value: number) {
+  return value.toLocaleString('zh-CN', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+}
+
 function percentFromUnit(value: number) {
   return `${(value * 100).toFixed(0)}%`;
 }
@@ -606,7 +613,7 @@ export function DashboardPage() {
         items: [
           `一曲线本周交付金额 ${moneyWithUnit(overview.curve1_delivery_in_period)}。`,
           `一曲线当前快照项目 ${curve1Reports.length} 个，其中健康 ${curve1HealthCounts.healthy} 个，健康率 ${percentFromUnit(overview.curve1_health_rate)}。`,
-          `二/三曲线私有化部署项目 ${curve23Reports.length} 个，健康率 ${percentFromUnit(overview.curve23_health_rate)}。`,
+          `二/三曲线私有化部署项目 ${curve23Reports.length} 个，按预算总人天口径汇报，健康率 ${percentFromUnit(overview.curve23_health_rate)}。`,
         ],
       },
       {
@@ -615,7 +622,7 @@ export function DashboardPage() {
         items: [
           `高/中风险共 ${riskRows.length} 条，需优先盯住 ${topRiskNames.length > 0 ? topRiskNames.join('、') : '当前重点项目'}。`,
           `一曲线成本风险项目 ${curve1CostRows.filter((row) => row.deviation > 0).length} 个。`,
-          `二/三曲线部署预算偏离项目 ${curve23ExecutionRows.filter((row) => row.deviation > 0).length} 个。`,
+          `二/三曲线部署人天偏离项目 ${curve23ExecutionRows.filter((row) => row.deviation > 0).length} 个。`,
         ],
       },
       {
@@ -629,7 +636,7 @@ export function DashboardPage() {
             ? `各 PM 工时中，${pmCards[0].pmName} ${pmCards[0].totalHours}h 最高。`
             : '当前暂无 PM 工时统计。',
           '当前汇报页已统一按“本周交付 + 最新快照”双口径呈现。',
-          '二/三曲线已切换为私有化部署口径，不再展示标注和供应商信息。',
+          '二/三曲线已切换为私有化部署 + 人天口径，不再展示标注和供应商信息。',
         ],
       },
       {
@@ -698,15 +705,15 @@ export function DashboardPage() {
         color: COLOR.teal,
       },
       {
-        label: '二/三曲线合同额（万）',
-        value: money(overview.curve23_contract_amount),
+        label: '二/三曲线预算总人天',
+        value: personDays(overview.curve23_contract_amount),
         subtext: `私有化部署 · ${curveBreakdown.curve2 + curveBreakdown.curve3} 项目`,
         color: COLOR.indigo,
       },
       {
-        label: '二/三曲线已耗成本（万）',
-        value: money(curve23Reports.reduce((sum, report) => sum + report.costConsumed, 0)),
-        subtext: '按预算与里程碑执行口径汇报',
+        label: '二/三曲线累计已耗人天',
+        value: personDays(curve23Reports.reduce((sum, report) => sum + report.costConsumed, 0)),
+        subtext: '按预算总人天与里程碑执行口径汇报',
         color: '#3A4FA0',
       },
       {
@@ -1207,7 +1214,7 @@ export function DashboardPage() {
         <div className="wr-sec__hdr wr-sec__hdr--navy">
           <h2>📊 ① 业务总览</h2>
           <span className="wr-badge">
-            {overview.active_projects}个在执行项目 · 合同总规模 {money(overview.total_contract_amount)}万
+            {overview.active_projects}个在执行项目 · 一曲线按金额展示，二/三曲线按人天展示
           </span>
         </div>
         <div className="wr-sec__body">
@@ -1239,7 +1246,7 @@ export function DashboardPage() {
                     <ReactECharts option={curve23ProgressOption} style={{ height: '100%' }} />
                   </div>
                   <div className="wr-note wr-note--green">
-                    二/三曲线已按私有化部署口径展示，仅保留里程碑进度、预算执行和风险信息。
+                    二/三曲线已按私有化部署 + 人天口径展示，仅保留里程碑进度、人天执行和风险信息。
                   </div>
                 </>
               ) : (
@@ -1377,7 +1384,7 @@ export function DashboardPage() {
       <section className="wr-sec">
         <div className="wr-sec__hdr wr-sec__hdr--navy">
           <h2>💰 ④ 成本与执行专项 · 分曲线统计</h2>
-          <span className="wr-badge">一曲线按标注交付口径；二/三曲线按私有化部署口径</span>
+          <span className="wr-badge">一曲线按标注交付口径；二/三曲线按私有化部署 + 人天口径</span>
         </div>
         <div className="wr-sec__body">
           <div className="wr-chart-title wr-chart-title--navy">一曲线成本健康状态（按项目）</div>
@@ -1438,7 +1445,7 @@ export function DashboardPage() {
           </div>
 
           <div className="wr-chart-title wr-chart-title--indigo wr-chart-title--mt">
-            二/三曲线部署执行明细（预算 / 里程碑口径）
+            二/三曲线部署执行明细（人天 / 里程碑口径）
           </div>
           <div className="wr-table-wrap">
             <table className="wr-table">
@@ -1447,10 +1454,10 @@ export function DashboardPage() {
                 <th>项目名称</th>
                 <th>PM</th>
                 <th>进度%</th>
-                <th>预算总额(万)</th>
-                <th>已耗成本(万)</th>
-                <th>应耗预算(万)</th>
-                <th>偏差(万)</th>
+                <th>预算总人天</th>
+                <th>累计已耗人天</th>
+                <th>应耗人天</th>
+                <th>偏差(人天)</th>
                 <th>偏差率</th>
                 <th>综合健康度</th>
                 <th>执行状态</th>
@@ -1464,12 +1471,12 @@ export function DashboardPage() {
                     <td className="wr-table__project">{row.report.projectName}</td>
                     <td>{row.report.pmName}</td>
                     <td>{percentFromUnit(progressUnit(row.report.progressPct))}</td>
-                    <td>{money(row.report.budgetTotal)}</td>
-                    <td>{money(row.report.costConsumed)}</td>
-                    <td>{money(row.expectedBudget)}</td>
+                    <td>{personDays(row.report.budgetTotal)}</td>
+                    <td>{personDays(row.report.costConsumed)}</td>
+                    <td>{personDays(row.expectedBudget)}</td>
                     <td className={row.deviation > 0 ? 'wr-over' : row.deviation < 0 ? 'wr-save' : 'wr-ok'}>
                       {row.deviation > 0 ? '+' : ''}
-                      {money(row.deviation)}
+                      {personDays(row.deviation)}
                     </td>
                     <td className={row.deviationRate > 0 ? 'wr-over' : row.deviationRate < 0 ? 'wr-save' : 'wr-ok'}>
                       {row.deviationRate > 0 ? '+' : ''}
@@ -1490,7 +1497,7 @@ export function DashboardPage() {
             </table>
           </div>
           <div className="wr-note wr-note--amber">
-            二/三曲线为私有化部署项目，本区不展示标注数量、标注单位和供应商信息。
+            二/三曲线为私有化部署项目，本区统一展示预算总人天、累计已耗人天和里程碑执行偏差，不展示标注数量、标注单位和供应商信息。
           </div>
         </div>
       </section>

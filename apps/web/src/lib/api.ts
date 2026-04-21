@@ -66,6 +66,16 @@ export type ProjectOption = {
 
 export type ProjectPayload = ProjectOption;
 
+export type RiskItem = {
+  id: string;
+  level: '绿' | '黄' | '红';
+  title: string;
+  status: 'open' | 'watching' | 'closed';
+  dueDate: string;
+  description: string;
+  action: string;
+};
+
 export type PmWeeklyReport = {
   id: string;
   projectId: string;
@@ -90,6 +100,7 @@ export type PmWeeklyReport = {
   blockerStatus: 'open' | 'watching' | 'closed';
   blockerDueDate: string;
   suggestedAction: string;
+  riskItems: RiskItem[];
   supplierName: string;
   supplierHeadcount: number;
   supplierQuality: number;

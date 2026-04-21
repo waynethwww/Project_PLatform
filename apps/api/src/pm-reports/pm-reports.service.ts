@@ -9,6 +9,7 @@ import {
   PmWeeklyReportRecord,
   PmWeeklyReportsStore,
   ProjectOption,
+  RiskItem,
 } from './types';
 
 @Injectable()
@@ -219,7 +220,7 @@ export class PmReportsService {
       ...baseProject,
       annotationType: '',
       plannedQty: 0,
-      qtyUnit: '',
+      qtyUnit: '人天',
       defaultSupplier: '',
     };
   }
@@ -242,6 +243,9 @@ export class PmReportsService {
           defaultSupplier: report.supplierName,
         });
 
+    const riskItems = this.normalizeRiskItems(report);
+    const primaryRisk = this.pickPrimaryRisk(riskItems);
+
     const baseReport: PmWeeklyReportRecord = {
       ...report,
       projectId: normalizedProject.id,
@@ -252,6 +256,13 @@ export class PmReportsService {
       plannedQty: normalizedProject.plannedQty,
       qtyUnit: normalizedProject.qtyUnit,
       budgetTotal: normalizedProject.budgetTotal,
+      riskLevel: primaryRisk.level,
+      riskDesc: primaryRisk.description,
+      blockerTitle: primaryRisk.title,
+      blockerStatus: primaryRisk.status,
+      blockerDueDate: primaryRisk.dueDate,
+      suggestedAction: primaryRisk.action,
+      riskItems,
     };
 
     if (this.isCurve1Project(normalizedProject.curveType)) {
@@ -292,6 +303,78 @@ export class PmReportsService {
       budgetTotal: payload.budgetTotal,
       defaultSupplier: payload.defaultSupplier.trim(),
     });
+  }
+
+  private normalizeRiskItems(report: PmWeeklyReportRecord): RiskItem[] {
+    const nextItems =
+      Array.isArray(report.riskItems) && report.riskItems.length > 0
+        ? report.riskItems
+        : [
+            {
+              id: `${report.id}-risk-1`,
+              level: report.riskLevel,
+              title: report.blockerTitle,
+              status: report.blockerStatus,
+              dueDate: report.blockerDueDate,
+              description: report.riskDesc,
+              action: report.suggestedAction,
+            },
+          ];
+
+    return nextItems.map((item, index) => ({
+      id: item.id?.trim() || `${report.id}-risk-${index + 1}`,
+      level: item.level,
+      title: item.title?.trim() || (item.level === '绿' ? '' : report.blockerTitle.trim()),
+      status: item.status,
+      dueDate: item.dueDate || report.blockerDueDate,
+      description: item.description?.trim() || report.riskDesc,
+      action: item.action?.trim() || report.suggestedAction,
+    }));
+  }
+
+  private pickPrimaryRisk(riskItems: RiskItem[]) {
+    const sorted = [...riskItems].sort((left, right) => {
+      const rank = this.riskRank(left.level) - this.riskRank(right.level);
+      if (rank !== 0) {
+        return rank;
+      }
+
+      return this.blockerRank(left.status) - this.blockerRank(right.status);
+    });
+
+    return sorted[0] || {
+      id: 'default-risk',
+      level: '绿' as const,
+      title: '',
+      status: 'closed' as const,
+      dueDate: new Date().toISOString().slice(0, 10),
+      description: '',
+      action: '',
+    };
+  }
+
+  private riskRank(level: RiskItem['level']) {
+    if (level === '红') {
+      return 0;
+    }
+
+    if (level === '黄') {
+      return 1;
+    }
+
+    return 2;
+  }
+
+  private blockerRank(status: RiskItem['status']) {
+    if (status === 'open') {
+      return 0;
+    }
+
+    if (status === 'watching') {
+      return 1;
+    }
+
+    return 2;
   }
 
   private sortProjects(projects: ProjectOption[]) {
@@ -355,6 +438,7 @@ export class PmReportsService {
       blockerStatus: payload.blockerStatus,
       blockerDueDate: payload.blockerDueDate,
       suggestedAction: payload.suggestedAction,
+      riskItems: payload.riskItems,
       supplierName: payload.supplierName,
       supplierHeadcount: payload.supplierHeadcount,
       supplierQuality: payload.supplierQuality,

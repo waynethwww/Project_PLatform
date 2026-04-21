@@ -14,6 +14,16 @@ export type ReportStatus = 'draft' | 'submitted';
 export type RiskLevel = '绿' | '黄' | '红';
 export type BlockerStatus = 'open' | 'watching' | 'closed';
 
+export type RiskItem = {
+  id: string;
+  level: RiskLevel;
+  title: string;
+  status: BlockerStatus;
+  dueDate: string;
+  description: string;
+  action: string;
+};
+
 export type PmWeeklyReportRecord = {
   id: string;
   projectId: string;
@@ -38,6 +48,7 @@ export type PmWeeklyReportRecord = {
   blockerStatus: BlockerStatus;
   blockerDueDate: string;
   suggestedAction: string;
+  riskItems: RiskItem[];
   supplierName: string;
   supplierHeadcount: number;
   supplierQuality: number;
@@ -61,4 +72,3 @@ export type PmWeeklyReportsStore = {
   projects: ProjectOption[];
   reports: PmWeeklyReportRecord[];
 };
-
