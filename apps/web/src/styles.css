@@ -1617,13 +1617,17 @@ textarea {
 .pm-inline-tag {
   display: inline-flex;
   align-items: center;
-  padding: 6px 10px;
+  justify-content: center;
+  padding: 7px 14px;
   border-radius: 999px;
   border: 1px solid #d7dde8;
   background: #f7f9fc;
   color: #42526b;
   font-size: 12px;
   line-height: 1;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .pm-badge--ok {
@@ -1743,6 +1747,15 @@ textarea {
   padding: 14px 16px 12px;
   border-bottom: 1px solid #eef1f5;
   background: #fbfcfe;
+}
+
+.pm-entry-group__head > div:first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.pm-entry-group__head > .pm-inline-tag {
+  align-self: center;
 }
 
 .pm-entry-group__head h3 {
@@ -2114,6 +2127,13 @@ textarea {
 .pm-record__top strong {
   color: #182131;
   font-size: 14px;
+}
+
+.pm-record__headline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .pm-record__top span,
@@ -2523,6 +2543,30 @@ textarea {
   margin-bottom: 14px;
 }
 
+.pm-manager-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.pm-manager-toolbar__filters {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.pm-field--search {
+  flex: 1 1 280px;
+}
+
+.pm-field--filter {
+  flex: 0 0 160px;
+}
+
 .pm-manager-list {
   display: flex;
   flex-direction: column;
@@ -2551,6 +2595,27 @@ textarea {
   flex: 1;
 }
 
+.pm-list-index {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: #edf3ff;
+  color: #246bdb;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.pm-manager-item--recycle .pm-list-index {
+  background: #fff0f0;
+  color: #d05a5a;
+}
+
 .pm-manager-item__top,
 .pm-manager-item__meta {
   display: flex;
@@ -2562,6 +2627,25 @@ textarea {
 .pm-manager-item__top strong {
   color: #182131;
   font-size: 16px;
+}
+
+.pm-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.pm-pagination__info {
+  color: #5f6d83;
+  font-size: 13px;
+}
+
+.pm-pagination__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .pm-manager-item__meta {
@@ -2789,12 +2873,21 @@ textarea {
 
   .pm-context-meta,
   .pm-context-actions,
-  .pm-manager-summary {
+  .pm-manager-summary,
+  .pm-manager-toolbar,
+  .pm-manager-toolbar__filters,
+  .pm-pagination {
     flex-direction: column;
   }
 
   .pm-manager-item {
     flex-direction: column;
+  }
+
+  .pm-field--search,
+  .pm-field--filter {
+    width: 100%;
+    flex-basis: auto;
   }
 
   .pm-risk-card__head {

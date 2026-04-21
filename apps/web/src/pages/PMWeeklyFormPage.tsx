@@ -46,6 +46,19 @@ type PendingProjectAction = {
   project: ProjectOption;
 } | null;
 
+const MANAGER_PAGE_SIZE = 10;
+const CURVE_FILTER_OPTIONS = [
+  { value: '', label: '全部曲线' },
+  { value: '一曲线', label: '一曲线' },
+  { value: '二曲线', label: '二曲线' },
+  { value: '三曲线', label: '三曲线' },
+];
+const REPORT_STATUS_FILTER_OPTIONS = [
+  { value: '', label: '全部状态' },
+  { value: 'submitted', label: '已提交' },
+  { value: 'draft', label: '草稿' },
+];
+
 const PROJECT_MANAGER_OPTIONS = [
   { label: '刘兴祖', keywords: ['liuxingzu', 'lxz', 'liu', 'xing', 'zu'] },
   { label: '王天浩', keywords: ['wangtianhao', 'wth', 'wang', 'tian', 'hao'] },
@@ -249,6 +262,32 @@ function getPrimaryRiskItem(riskItems: RiskItem[]) {
 
     return blockerRank(left.status) - blockerRank(right.status);
   })[0];
+}
+
+function matchesSearchKeyword(keyword: string, values: Array<string | number | undefined>) {
+  const normalizedKeyword = keyword.trim().toLowerCase();
+  if (!normalizedKeyword) {
+    return true;
+  }
+
+  return values.some((value) =>
+    String(value || '')
+      .toLowerCase()
+      .includes(normalizedKeyword),
+  );
+}
+
+function paginateItems<T>(items: T[], page: number, pageSize = MANAGER_PAGE_SIZE) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const currentPage = Math.min(Math.max(page, 1), totalPages);
+  const startIndex = (currentPage - 1) * pageSize;
+
+  return {
+    currentPage,
+    totalPages,
+    startIndex,
+    items: items.slice(startIndex, startIndex + pageSize),
+  };
 }
 
 function toDateInputValue(date: Date) {
@@ -673,6 +712,42 @@ function ComboInput(props: ComboInputProps) {
   );
 }
 
+type PaginationBarProps = {
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+};
+
+function PaginationBar(props: PaginationBarProps) {
+  const { currentPage, totalPages, onPageChange } = props;
+
+  return (
+    <div className="pm-pagination">
+      <span className="pm-pagination__info">
+        第 {currentPage} / {totalPages} 页
+      </span>
+      <div className="pm-pagination__actions">
+        <button
+          type="button"
+          className="pm-mini-btn pm-mini-btn--soft"
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage <= 1}
+        >
+          上一页
+        </button>
+        <button
+          type="button"
+          className="pm-mini-btn pm-mini-btn--soft"
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage >= totalPages}
+        >
+          下一页
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function PMWeeklyFormPage() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [reports, setReports] = useState<PmWeeklyReport[]>([]);
@@ -690,6 +765,16 @@ export function PMWeeklyFormPage() {
   const [isRecycleModalOpen, setIsRecycleModalOpen] = useState(false);
   const [isReportHistoryModalOpen, setIsReportHistoryModalOpen] = useState(false);
   const [pendingProjectAction, setPendingProjectAction] = useState<PendingProjectAction>(null);
+  const [archiveKeyword, setArchiveKeyword] = useState('');
+  const [archiveCurveFilter, setArchiveCurveFilter] = useState('');
+  const [archivePage, setArchivePage] = useState(1);
+  const [recycleKeyword, setRecycleKeyword] = useState('');
+  const [recycleCurveFilter, setRecycleCurveFilter] = useState('');
+  const [recyclePage, setRecyclePage] = useState(1);
+  const [reportKeyword, setReportKeyword] = useState('');
+  const [reportCurveFilter, setReportCurveFilter] = useState('');
+  const [reportStatusFilter, setReportStatusFilter] = useState('');
+  const [reportPage, setReportPage] = useState(1);
 
   const activeProjects = useMemo(
     () => projects.filter((project) => project.status === 'active'),
@@ -702,6 +787,68 @@ export function PMWeeklyFormPage() {
   const recycledProjects = useMemo(
     () => projects.filter((project) => project.status === 'recycled'),
     [projects],
+  );
+
+  const filteredArchivedProjects = useMemo(
+    () =>
+      archivedProjects.filter(
+        (project) =>
+          (!archiveCurveFilter || project.curveType === archiveCurveFilter) &&
+          matchesSearchKeyword(archiveKeyword, [
+            project.name,
+            project.id,
+            project.pmName,
+            project.curveType,
+          ]),
+      ),
+    [archiveCurveFilter, archiveKeyword, archivedProjects],
+  );
+
+  const filteredRecycledProjects = useMemo(
+    () =>
+      recycledProjects.filter(
+        (project) =>
+          (!recycleCurveFilter || project.curveType === recycleCurveFilter) &&
+          matchesSearchKeyword(recycleKeyword, [
+            project.name,
+            project.id,
+            project.pmName,
+            project.curveType,
+          ]),
+      ),
+    [recycleCurveFilter, recycleKeyword, recycledProjects],
+  );
+
+  const filteredHistoryReports = useMemo(
+    () =>
+      reports.filter(
+        (report) =>
+          (!reportCurveFilter || report.curveType === reportCurveFilter) &&
+          (!reportStatusFilter || report.status === reportStatusFilter) &&
+          matchesSearchKeyword(reportKeyword, [
+            report.projectName,
+            report.projectId,
+            report.pmName,
+            report.weekStart,
+            report.curveType,
+          ]),
+      ),
+    [reportCurveFilter, reportKeyword, reportStatusFilter, reports],
+  );
+
+  const archivedPagination = useMemo(
+    () => paginateItems(filteredArchivedProjects, archivePage),
+    [archivePage, filteredArchivedProjects],
+  );
+
+  const recycledPagination = useMemo(
+    () => paginateItems(filteredRecycledProjects, recyclePage),
+    [filteredRecycledProjects, recyclePage],
+  );
+
+  const reportPagination = useMemo(
+    () => paginateItems(filteredHistoryReports, reportPage),
+    [filteredHistoryReports, reportPage],
   );
 
   useEffect(() => {
@@ -784,6 +931,18 @@ export function PMWeeklyFormPage() {
       setProjectStatus('新增项目模式：保存后即可在周填报中选择该项目');
     }
   }, [isProjectModalOpen, projectMode]);
+
+  useEffect(() => {
+    setArchivePage(1);
+  }, [archiveCurveFilter, archiveKeyword, isArchiveModalOpen]);
+
+  useEffect(() => {
+    setRecyclePage(1);
+  }, [isRecycleModalOpen, recycleCurveFilter, recycleKeyword]);
+
+  useEffect(() => {
+    setReportPage(1);
+  }, [isReportHistoryModalOpen, reportCurveFilter, reportKeyword, reportStatusFilter]);
 
   useEffect(() => {
     setForm((current) => normalizeFormByCurveType(selectedProject, current));
@@ -1522,15 +1681,12 @@ export function PMWeeklyFormPage() {
             <div className="pm-context-actions">
               <button className="pm-mini-btn pm-mini-btn--soft" onClick={() => setIsReportHistoryModalOpen(true)}>
                 提交记录
-                {reports.length > 0 ? <span className="pm-mini-btn__count">{reports.length}</span> : null}
               </button>
               <button className="pm-mini-btn pm-mini-btn--soft" onClick={() => setIsArchiveModalOpen(true)}>
                 归档管理
-                {archivedProjects.length > 0 ? <span className="pm-mini-btn__count">{archivedProjects.length}</span> : null}
               </button>
               <button className="pm-mini-btn pm-mini-btn--soft" onClick={() => setIsRecycleModalOpen(true)}>
                 回收站
-                {recycledProjects.length > 0 ? <span className="pm-mini-btn__count">{recycledProjects.length}</span> : null}
               </button>
               {selectedProject.status === 'active' ? (
                 <>
@@ -1635,13 +1791,7 @@ export function PMWeeklyFormPage() {
                         onValueChange={(value) => updateField('actualQty', value)}
                       />
                     </label>
-                  ) : (
-                    <div className="pm-auto-box pm-auto-box--hint">
-                      <span>私有化部署口径</span>
-                      <strong>不填交付量与数量单位</strong>
-                      <small>二/三曲线重点看里程碑进度、本周/累计已耗人天、阻塞事项和下周推进动作。</small>
-                    </div>
-                  )}
+                  ) : null}
                   <label className="pm-field">
                     <span className="pm-field__label">
                       {isSelectedCurve1 ? '本周交付金额' : '本周已耗人天'}
@@ -2319,15 +2469,41 @@ export function PMWeeklyFormPage() {
               </button>
             </div>
             <div className="pm-manager-summary">
-              <span className="pm-chip">已归档 {archivedProjects.length} 个项目</span>
               <span className="pm-side-note">归档项目会从当前填报名单移除，可随时恢复到活跃列表。</span>
             </div>
+            <div className="pm-manager-toolbar">
+              <div className="pm-manager-toolbar__filters">
+                <label className="pm-field pm-field--search">
+                  <span className="pm-field__label">查找项目</span>
+                  <input
+                    value={archiveKeyword}
+                    placeholder="按项目名称 / 编号 / PM 搜索"
+                    onChange={(event) => setArchiveKeyword(event.target.value)}
+                  />
+                </label>
+                <label className="pm-field pm-field--filter">
+                  <span className="pm-field__label">曲线筛选</span>
+                  <AppSelect
+                    value={archiveCurveFilter}
+                    onChange={setArchiveCurveFilter}
+                    ariaLabel="归档项目曲线筛选"
+                    size="compact"
+                    options={CURVE_FILTER_OPTIONS}
+                  />
+                </label>
+              </div>
+            </div>
             <div className="pm-manager-list">
-              {archivedProjects.length === 0 ? (
-                <div className="pm-records__empty">当前没有已归档项目</div>
+              {filteredArchivedProjects.length === 0 ? (
+                <div className="pm-records__empty">
+                  {archivedProjects.length === 0 ? '当前没有已归档项目' : '没有匹配的归档项目'}
+                </div>
               ) : (
-                archivedProjects.map((project) => (
+                archivedPagination.items.map((project, index) => (
                   <article key={project.id} className="pm-manager-item">
+                    <span className="pm-list-index">
+                      {String(archivedPagination.startIndex + index + 1).padStart(2, '0')}
+                    </span>
                     <div className="pm-manager-item__body">
                       <div className="pm-manager-item__top">
                         <strong>{project.name}</strong>
@@ -2352,6 +2528,13 @@ export function PMWeeklyFormPage() {
                 ))
               )}
             </div>
+            {filteredArchivedProjects.length > 0 ? (
+              <PaginationBar
+                currentPage={archivedPagination.currentPage}
+                totalPages={archivedPagination.totalPages}
+                onPageChange={setArchivePage}
+              />
+            ) : null}
           </section>
         </div>
       ) : null}
@@ -2374,15 +2557,41 @@ export function PMWeeklyFormPage() {
               </button>
             </div>
             <div className="pm-manager-summary">
-              <span className="pm-chip">回收站 {recycledProjects.length} 个项目</span>
               <span className="pm-side-note">移入回收站属于假删，数据仍保留，可通过右侧图标直接恢复。</span>
             </div>
+            <div className="pm-manager-toolbar">
+              <div className="pm-manager-toolbar__filters">
+                <label className="pm-field pm-field--search">
+                  <span className="pm-field__label">查找项目</span>
+                  <input
+                    value={recycleKeyword}
+                    placeholder="按项目名称 / 编号 / PM 搜索"
+                    onChange={(event) => setRecycleKeyword(event.target.value)}
+                  />
+                </label>
+                <label className="pm-field pm-field--filter">
+                  <span className="pm-field__label">曲线筛选</span>
+                  <AppSelect
+                    value={recycleCurveFilter}
+                    onChange={setRecycleCurveFilter}
+                    ariaLabel="回收站曲线筛选"
+                    size="compact"
+                    options={CURVE_FILTER_OPTIONS}
+                  />
+                </label>
+              </div>
+            </div>
             <div className="pm-manager-list">
-              {recycledProjects.length === 0 ? (
-                <div className="pm-records__empty">当前回收站为空</div>
+              {filteredRecycledProjects.length === 0 ? (
+                <div className="pm-records__empty">
+                  {recycledProjects.length === 0 ? '当前回收站为空' : '没有匹配的回收站项目'}
+                </div>
               ) : (
-                recycledProjects.map((project) => (
+                recycledPagination.items.map((project, index) => (
                   <article key={project.id} className="pm-manager-item pm-manager-item--recycle">
+                    <span className="pm-list-index">
+                      {String(recycledPagination.startIndex + index + 1).padStart(2, '0')}
+                    </span>
                     <div className="pm-manager-item__body">
                       <div className="pm-manager-item__top">
                         <strong>{project.name}</strong>
@@ -2407,6 +2616,13 @@ export function PMWeeklyFormPage() {
                 ))
               )}
             </div>
+            {filteredRecycledProjects.length > 0 ? (
+              <PaginationBar
+                currentPage={recycledPagination.currentPage}
+                totalPages={recycledPagination.totalPages}
+                onPageChange={setRecyclePage}
+              />
+            ) : null}
           </section>
         </div>
       ) : null}
@@ -2429,16 +2645,50 @@ export function PMWeeklyFormPage() {
               </button>
             </div>
             <div className="pm-manager-summary">
-              <span className="pm-chip">当前共 {reports.length} 条记录</span>
+              <span className="pm-side-note">提交记录按最新更新时间排序，可快速筛选并切换到目标周报。</span>
               <button className="pm-mini-btn pm-mini-btn--soft" onClick={createNewDraft}>
                 新建草稿
               </button>
             </div>
+            <div className="pm-manager-toolbar">
+              <div className="pm-manager-toolbar__filters">
+                <label className="pm-field pm-field--search">
+                  <span className="pm-field__label">查找记录</span>
+                  <input
+                    value={reportKeyword}
+                    placeholder="按项目名称 / 编号 / PM / 周期搜索"
+                    onChange={(event) => setReportKeyword(event.target.value)}
+                  />
+                </label>
+                <label className="pm-field pm-field--filter">
+                  <span className="pm-field__label">曲线筛选</span>
+                  <AppSelect
+                    value={reportCurveFilter}
+                    onChange={setReportCurveFilter}
+                    ariaLabel="提交记录曲线筛选"
+                    size="compact"
+                    options={CURVE_FILTER_OPTIONS}
+                  />
+                </label>
+                <label className="pm-field pm-field--filter">
+                  <span className="pm-field__label">状态筛选</span>
+                  <AppSelect
+                    value={reportStatusFilter}
+                    onChange={setReportStatusFilter}
+                    ariaLabel="提交记录状态筛选"
+                    size="compact"
+                    options={REPORT_STATUS_FILTER_OPTIONS}
+                  />
+                </label>
+              </div>
+            </div>
             <div className="pm-records">
-              {reports.length === 0 ? (
-                <div className="pm-records__empty">当前还没有已保存记录</div>
+              {filteredHistoryReports.length === 0 ? (
+                <div className="pm-records__empty">
+                  {reports.length === 0 ? '当前还没有已保存记录' : '没有匹配的提交记录'}
+                </div>
               ) : (
-                reports.map((report) => (
+                reportPagination.items.map((report, index) => (
                   <button
                     key={report.id}
                     className={`pm-record ${report.id === activeReportId ? 'is-active' : ''}`}
@@ -2448,7 +2698,12 @@ export function PMWeeklyFormPage() {
                     }}
                   >
                     <div className="pm-record__top">
-                      <strong>{report.projectName}</strong>
+                      <div className="pm-record__headline">
+                        <span className="pm-list-index">
+                          {String(reportPagination.startIndex + index + 1).padStart(2, '0')}
+                        </span>
+                        <strong>{report.projectName}</strong>
+                      </div>
                       <span>{recordStatusLabel(report.status)}</span>
                     </div>
                     <div className="pm-record__meta">
@@ -2463,6 +2718,13 @@ export function PMWeeklyFormPage() {
                 ))
               )}
             </div>
+            {filteredHistoryReports.length > 0 ? (
+              <PaginationBar
+                currentPage={reportPagination.currentPage}
+                totalPages={reportPagination.totalPages}
+                onPageChange={setReportPage}
+              />
+            ) : null}
           </section>
         </div>
       ) : null}
