@@ -291,6 +291,19 @@ function RestoreIcon() {
   );
 }
 
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M5 5l10 10M15 5L5 15"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function createDefaultPayload(
   project: ProjectOption,
   weekStart = getWeekStart(),
@@ -675,6 +688,7 @@ export function PMWeeklyFormPage() {
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [isRecycleModalOpen, setIsRecycleModalOpen] = useState(false);
+  const [isReportHistoryModalOpen, setIsReportHistoryModalOpen] = useState(false);
   const [pendingProjectAction, setPendingProjectAction] = useState<PendingProjectAction>(null);
 
   const activeProjects = useMemo(
@@ -1506,6 +1520,10 @@ export function PMWeeklyFormPage() {
               <span className="pm-badge">草稿状态：{isLoading ? '加载中...' : draftStatus}</span>
             </div>
             <div className="pm-context-actions">
+              <button className="pm-mini-btn pm-mini-btn--soft" onClick={() => setIsReportHistoryModalOpen(true)}>
+                提交记录
+                {reports.length > 0 ? <span className="pm-mini-btn__count">{reports.length}</span> : null}
+              </button>
               <button className="pm-mini-btn pm-mini-btn--soft" onClick={() => setIsArchiveModalOpen(true)}>
                 归档管理
                 {archivedProjects.length > 0 ? <span className="pm-mini-btn__count">{archivedProjects.length}</span> : null}
@@ -1986,44 +2004,6 @@ export function PMWeeklyFormPage() {
         </main>
 
         <aside className="pm-side">
-          <section className="pm-side-card">
-            <div className="pm-side-card__header">
-              <div>
-                <p>记录中心</p>
-                <h3>本地周报记录</h3>
-              </div>
-              <button className="pm-mini-btn" onClick={createNewDraft}>
-                新建
-              </button>
-            </div>
-            <div className="pm-records">
-              {reports.length === 0 ? (
-                <div className="pm-records__empty">当前还没有已保存记录</div>
-              ) : (
-                reports.map((report) => (
-                  <button
-                    key={report.id}
-                    className={`pm-record ${report.id === activeReportId ? 'is-active' : ''}`}
-                    onClick={() => selectReport(report)}
-                  >
-                    <div className="pm-record__top">
-                      <strong>{report.projectName}</strong>
-                      <span>{recordStatusLabel(report.status)}</span>
-                    </div>
-                    <div className="pm-record__meta">
-                      <span>{report.weekStart}</span>
-                      <span>{report.pmName}</span>
-                    </div>
-                    <div className="pm-record__meta">
-                      <span>{report.curveType}</span>
-                      <span>更新于 {formatDateTime(report.updatedAt)}</span>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          </section>
-
           <section className="pm-side-card pm-side-card--overview">
             <p>提交概览</p>
             <h3>提交概览</h3>
@@ -2120,8 +2100,13 @@ export function PMWeeklyFormPage() {
                 <p>项目主数据</p>
                 <h3 id="pm-project-modal-title">新增项目</h3>
               </div>
-              <button className="pm-mini-btn" onClick={closeProjectModal} disabled={isProjectSaving}>
-                关闭
+              <button
+                className="pm-modal__close"
+                onClick={closeProjectModal}
+                disabled={isProjectSaving}
+                aria-label="关闭新增项目弹窗"
+              >
+                <CloseIcon />
               </button>
             </div>
             <div className="pm-project-form">
@@ -2283,11 +2268,12 @@ export function PMWeeklyFormPage() {
                 <h3 id="pm-project-action-title">{lifecycleActionLabel(pendingProjectAction.type)}</h3>
               </div>
               <button
-                className="pm-mini-btn"
+                className="pm-modal__close"
                 onClick={() => setPendingProjectAction(null)}
                 disabled={isProjectSaving}
+                aria-label="关闭项目操作确认弹窗"
               >
-                取消
+                <CloseIcon />
               </button>
             </div>
             <div className="pm-confirm-card">
@@ -2324,8 +2310,12 @@ export function PMWeeklyFormPage() {
                 <p>项目管理</p>
                 <h3 id="pm-archive-modal-title">归档管理</h3>
               </div>
-              <button className="pm-mini-btn" onClick={() => setIsArchiveModalOpen(false)}>
-                关闭
+              <button
+                className="pm-modal__close"
+                onClick={() => setIsArchiveModalOpen(false)}
+                aria-label="关闭归档管理弹窗"
+              >
+                <CloseIcon />
               </button>
             </div>
             <div className="pm-manager-summary">
@@ -2375,8 +2365,12 @@ export function PMWeeklyFormPage() {
                 <p>项目管理</p>
                 <h3 id="pm-recycle-modal-title">回收站</h3>
               </div>
-              <button className="pm-mini-btn" onClick={() => setIsRecycleModalOpen(false)}>
-                关闭
+              <button
+                className="pm-modal__close"
+                onClick={() => setIsRecycleModalOpen(false)}
+                aria-label="关闭回收站弹窗"
+              >
+                <CloseIcon />
               </button>
             </div>
             <div className="pm-manager-summary">
@@ -2410,6 +2404,62 @@ export function PMWeeklyFormPage() {
                       <RestoreIcon />
                     </button>
                   </article>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isReportHistoryModalOpen ? (
+        <div className="pm-modal" role="dialog" aria-modal="true" aria-labelledby="pm-report-history-modal-title">
+          <div className="pm-modal__backdrop" onClick={() => setIsReportHistoryModalOpen(false)} />
+          <section className="pm-modal__panel pm-modal__panel--manager">
+            <div className="pm-modal__header">
+              <div>
+                <p>记录中心</p>
+                <h3 id="pm-report-history-modal-title">本地周报记录</h3>
+              </div>
+              <button
+                className="pm-modal__close"
+                onClick={() => setIsReportHistoryModalOpen(false)}
+                aria-label="关闭本地周报记录弹窗"
+              >
+                <CloseIcon />
+              </button>
+            </div>
+            <div className="pm-manager-summary">
+              <span className="pm-chip">当前共 {reports.length} 条记录</span>
+              <button className="pm-mini-btn pm-mini-btn--soft" onClick={createNewDraft}>
+                新建草稿
+              </button>
+            </div>
+            <div className="pm-records">
+              {reports.length === 0 ? (
+                <div className="pm-records__empty">当前还没有已保存记录</div>
+              ) : (
+                reports.map((report) => (
+                  <button
+                    key={report.id}
+                    className={`pm-record ${report.id === activeReportId ? 'is-active' : ''}`}
+                    onClick={() => {
+                      selectReport(report);
+                      setIsReportHistoryModalOpen(false);
+                    }}
+                  >
+                    <div className="pm-record__top">
+                      <strong>{report.projectName}</strong>
+                      <span>{recordStatusLabel(report.status)}</span>
+                    </div>
+                    <div className="pm-record__meta">
+                      <span>{report.weekStart}</span>
+                      <span>{report.pmName}</span>
+                    </div>
+                    <div className="pm-record__meta">
+                      <span>{report.curveType}</span>
+                      <span>更新于 {formatDateTime(report.updatedAt)}</span>
+                    </div>
+                  </button>
                 ))
               )}
             </div>

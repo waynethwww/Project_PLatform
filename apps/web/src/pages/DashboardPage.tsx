@@ -238,6 +238,13 @@ type PieDatum = {
   };
 };
 
+type PmWeeklyMetricRow = {
+  pmName: string;
+  weeklyDelivery: number;
+  hours: number;
+  projects: Set<string>;
+};
+
 function buildBottomLegend(fontSize = 10) {
   return {
     type: 'scroll' as const,
@@ -500,15 +507,21 @@ export function DashboardPage() {
     [curve1Reports],
   );
 
+  const qualityChartRows = useMemo(
+    () => qualityRows.filter((row) => row.report.qualityPass > 0),
+    [qualityRows],
+  );
+
   const riskRows = useMemo(() => getRiskRows(latestReports), [latestReports]);
 
   const topRiskNames = useMemo(() => getTopNames(riskRows, (row) => row.projectName), [riskRows]);
 
-  const topDeliveryPm = useMemo(() => {
-    const grouped = new Map<string, { weeklyDelivery: number; hours: number; projects: Set<string> }>();
+  const pmWeeklyMetrics = useMemo(() => {
+    const grouped = new Map<string, PmWeeklyMetricRow>();
 
-    for (const report of periodReports.filter((item) => item.curveType === '一曲线')) {
+    for (const report of curve1Reports) {
       const current = grouped.get(report.pmName) || {
+        pmName: report.pmName,
         weeklyDelivery: 0,
         hours: 0,
         projects: new Set<string>(),
@@ -520,21 +533,30 @@ export function DashboardPage() {
       grouped.set(report.pmName, current);
     }
 
-    return Array.from(grouped.entries())
-      .map(([pmName, values]) => ({
-        pmName,
-        weeklyDelivery: values.weeklyDelivery,
-        hours: values.hours,
-        projectCount: values.projects.size,
-      }))
-      .sort((left, right) => right.weeklyDelivery - left.weeklyDelivery)[0] || null;
-  }, [periodReports]);
+    return Array.from(grouped.values()).sort(
+      (left, right) => right.weeklyDelivery - left.weeklyDelivery || right.hours - left.hours,
+    );
+  }, [curve1Reports]);
+
+  const topDeliveryPm = useMemo(
+    () =>
+      pmWeeklyMetrics
+        .map((values) => ({
+          pmName: values.pmName,
+          weeklyDelivery: values.weeklyDelivery,
+          hours: values.hours,
+          projectCount: values.projects.size,
+        }))
+        .sort((left, right) => right.weeklyDelivery - left.weeklyDelivery)[0] || null,
+    [pmWeeklyMetrics],
+  );
 
   const pmLoadRows = useMemo(() => {
-    const grouped = new Map<string, { weeklyDelivery: number; hours: number; projects: Set<string> }>();
+    const grouped = new Map<string, PmWeeklyMetricRow>();
 
-    for (const report of periodReports.filter((item) => item.curveType === '一曲线')) {
+    for (const report of curve1Reports) {
       const current = grouped.get(report.pmName) || {
+        pmName: report.pmName,
         weeklyDelivery: 0,
         hours: 0,
         projects: new Set<string>(),
@@ -565,12 +587,12 @@ export function DashboardPage() {
         } satisfies PmLoadRow;
       })
       .sort((left, right) => right.weeklyDelivery - left.weeklyDelivery);
-  }, [periodReports]);
+  }, [curve1Reports]);
 
   const pmCards = useMemo(() => {
     const grouped = new Map<string, { totalHours: number; projects: Map<string, number> }>();
 
-    for (const report of periodReports) {
+    for (const report of latestReports) {
       const current = grouped.get(report.pmName) || {
         totalHours: 0,
         projects: new Map<string, number>(),
@@ -604,7 +626,7 @@ export function DashboardPage() {
         } satisfies PmCard;
       })
       .sort((left, right) => right.totalHours - left.totalHours);
-  }, [periodReports]);
+  }, [latestReports]);
 
   const weeklySummaryBoxes = useMemo(() => {
     const boxes: WeeklySummaryBox[] = [
@@ -634,7 +656,7 @@ export function DashboardPage() {
             ? `${topDeliveryPm.pmName} 是本周一曲线交付最高 PM，本周交付 ${moneyWithUnit(topDeliveryPm.weeklyDelivery)}。`
             : '当前暂无一曲线交付 PM 统计。',
           pmCards[0]
-            ? `各 PM 工时中，${pmCards[0].pmName} ${pmCards[0].totalHours}h 最高。`
+            ? `各 PM 最新周填报工时中，${pmCards[0].pmName} ${pmCards[0].totalHours}h 最高。`
             : '当前暂无 PM 工时统计。',
           '当前汇报页已统一按“本周交付 + 最新快照”双口径呈现。',
           '二/三曲线已切换为私有化部署 + 人天口径，不再展示标注和供应商信息。',
@@ -939,14 +961,20 @@ export function DashboardPage() {
     () => ({
       tooltip: { trigger: 'axis' },
       legend: {
-        bottom: 0,
+        top: 0,
+        right: 8,
         textStyle: { color: '#38385E', fontSize: 10 },
       },
-      grid: { top: 18, left: 42, right: 16, bottom: 42 },
+      grid: { top: 46, left: 48, right: 16, bottom: 46 },
       xAxis: {
         type: 'category',
-        data: qualityRows.map((row) => compactProjectName(row.report.projectName, 12)),
-        axisLabel: { color: '#38385E', fontSize: 10, rotate: 16 },
+        data: qualityChartRows.map((row) => compactProjectName(row.report.projectName, 12)),
+        axisLabel: {
+          color: '#38385E',
+          fontSize: 10,
+          rotate: qualityChartRows.length > 3 ? 12 : 0,
+          margin: 14,
+        },
         axisLine: { lineStyle: { color: '#BCC4DF' } },
       },
       yAxis: {
@@ -960,10 +988,11 @@ export function DashboardPage() {
         {
           name: '验收通过率%',
           type: 'bar',
-          data: qualityRows.map((row) => row.report.qualityPass),
+          barMaxWidth: 56,
+          data: qualityChartRows.map((row) => row.report.qualityPass),
           itemStyle: {
             color: (params: { dataIndex: number }) => {
-              const value = qualityRows[params.dataIndex]?.report.qualityPass || 0;
+              const value = qualityChartRows[params.dataIndex]?.report.qualityPass || 0;
               if (value === 0) {
                 return 'rgba(120,120,120,.45)';
               }
@@ -981,13 +1010,13 @@ export function DashboardPage() {
         {
           name: '目标线 98%',
           type: 'line',
-          data: qualityRows.map(() => 98),
+          data: qualityChartRows.map(() => 98),
           showSymbol: false,
           lineStyle: { color: 'rgba(154,32,32,.65)', type: 'dashed', width: 2 },
         },
       ],
     }),
-    [qualityRows],
+    [qualityChartRows],
   );
 
   const curve1ProgressOption = useMemo(
@@ -1054,7 +1083,6 @@ export function DashboardPage() {
     );
 
     return {
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
       legend: {
         right: 0,
         top: 0,
@@ -1062,6 +1090,19 @@ export function DashboardPage() {
         textStyle: { color: '#38385E', fontSize: 9 },
       },
       grid: { top: 18, left: 42, right: 140, bottom: 38 },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        confine: true,
+        formatter: (params: Array<{ axisValue: string; seriesName: string; value: number; marker: string }>) => {
+          const visible = params.filter((item) => Number(item.value) > 0);
+          const rows = visible.length > 0 ? visible : params.slice(0, 1);
+          return [
+            rows[0]?.axisValue || '',
+            ...rows.map((item) => `${item.marker} ${item.seriesName}: ${item.value}h`),
+          ].join('<br/>');
+        },
+      },
       xAxis: {
         type: 'category',
         data: pmNames,
@@ -1514,13 +1555,19 @@ export function DashboardPage() {
               <div className="wr-grid wr-grid--2">
             <div>
               <div className="wr-chart-title wr-chart-title--amber">一曲线：有验收数据的项目质量对比</div>
-              <div className="wr-chart wr-chart--220">
-                <ReactECharts option={qualityOption} style={{ height: '100%' }} />
-              </div>
-              <div className="wr-note wr-note--red">
-                ⚠ 当前质量目标线为 98%；无验收数据项目{' '}
-                {qualityRows.filter((row) => row.report.qualityPass === 0).length} 个。
-              </div>
+              {qualityChartRows.length > 0 ? (
+                <>
+                  <div className="wr-chart wr-chart--240">
+                    <ReactECharts option={qualityOption} style={{ height: '100%' }} />
+                  </div>
+                  <div className="wr-note wr-note--red">
+                    ⚠ 当前质量目标线为 98%；无验收数据项目{' '}
+                    {qualityRows.filter((row) => row.report.qualityPass === 0).length} 个。
+                  </div>
+                </>
+              ) : (
+                <div className="wr-empty">当前项目暂无验收率数据，本图暂不展示柱状对比。</div>
+              )}
             </div>
             <div>
               <div className="wr-chart-title wr-chart-title--amber">一曲线各项目进度</div>
@@ -1693,7 +1740,7 @@ export function DashboardPage() {
               )}
             </div>
             <div>
-              <div className="wr-chart-title wr-chart-title--pm">各PM项目时间投入分布（堆叠图）</div>
+              <div className="wr-chart-title wr-chart-title--pm">各PM项目时间投入分布（按最新周填报）</div>
               <div className="wr-chart wr-chart--260">
                 <ReactECharts option={pmStackOption} style={{ height: '100%' }} />
               </div>
@@ -1763,7 +1810,7 @@ export function DashboardPage() {
                   ))}
                 </div>
                 <div className="wr-pm-card__alert">
-                  当前覆盖 {card.projects.length} 个项目，最高投入为{' '}
+                  当前展示为最新周填报工时，覆盖 {card.projects.length} 个项目，最高投入为{' '}
                   {card.projects[0]?.projectName || '—'}。
                 </div>
               </article>
