@@ -54,6 +54,48 @@ function cloneProject(project: ProjectOption): ProjectOption {
   return { ...project };
 }
 
+function isCurve1Project(curveType: string) {
+  return curveType === '一曲线';
+}
+
+function normalizeProjectOption(project: ProjectOption): ProjectOption {
+  if (isCurve1Project(project.curveType)) {
+    return project;
+  }
+
+  return {
+    ...project,
+    annotationType: '',
+    plannedQty: 0,
+    qtyUnit: '',
+    defaultSupplier: '',
+  };
+}
+
+function normalizeFormByCurveType(
+  project: ProjectOption,
+  payload: FormState,
+): FormState {
+  if (isCurve1Project(project.curveType)) {
+    return payload;
+  }
+
+  return {
+    ...payload,
+    actualQty: 0,
+    supplierName: '',
+    supplierHeadcount: 0,
+    supplierQuality: 0,
+    supplierOtdRate: 0,
+    supplierCooperation: 0,
+    supplierIssue: '',
+    algoVersion: '',
+    modificationRate: 0,
+    timeSavePct: 0,
+    algoAdvice: '',
+  };
+}
+
 function toDateInputValue(date: Date) {
   const year = date.getFullYear();
   const month = `${date.getMonth() + 1}`.padStart(2, '0');
@@ -72,7 +114,7 @@ function createDefaultPayload(
   project: ProjectOption,
   weekStart = getWeekStart(),
 ): FormState {
-  return {
+  return normalizeFormByCurveType(project, {
     projectId: project.id,
     weekStart,
     progressPct: project.curveType === '一曲线' ? 72 : 86,
@@ -94,7 +136,10 @@ function createDefaultPayload(
       project.name === 'Mary' ? '格式适配工期偏移' : '客户验收标准仍有灰区',
     blockerStatus: project.name === 'Mary' ? 'watching' : 'open',
     blockerDueDate: weekStart,
-    suggestedAction: '本周完成一次专项复盘，并同步客户/供应商侧动作',
+    suggestedAction:
+      project.curveType === '一曲线'
+        ? '本周完成一次专项复盘，并同步客户/供应商侧动作'
+        : '本周完成一次部署复盘，并明确客户/研发/交付三方动作',
     supplierName: project.defaultSupplier,
     supplierHeadcount: project.curveType === '一曲线' ? 12 : 0,
     supplierQuality: project.curveType === '一曲线' ? 89 : 100,
@@ -116,7 +161,7 @@ function createDefaultPayload(
     pmComment: '本周整体推进顺畅，已和协同方同步下周关键节点。',
     nextWeekFocus: '1. 盯质量与成本  2. 清理阻塞事项  3. 输出周报摘要',
     status: 'draft',
-  };
+  });
 }
 
 function reportToPayload(report: PmWeeklyReport): FormState {
@@ -315,14 +360,14 @@ export function PMWeeklyFormPage() {
             nextProjects.find((project) => project.id === nextReports[0].projectId) ||
             nextProjects[0] ||
             fallbackProject;
-          setProjectForm(cloneProject(initialProject));
+          setProjectForm(cloneProject(normalizeProjectOption(initialProject)));
           setProjectMode('edit');
           setProjectStatus(`已载入 ${initialProject.name} 主数据，可调整项目经理`);
         } else {
           const firstProject = nextProjects[0] || fallbackProject;
           setForm(createDefaultPayload(firstProject));
           setDraftStatus('当前没有填报记录，可创建首个周报草稿');
-          setProjectForm(cloneProject(firstProject));
+          setProjectForm(cloneProject(normalizeProjectOption(firstProject)));
           setProjectMode('edit');
           setProjectStatus('当前可新增项目，或先编辑当前项目主数据');
         }
@@ -335,7 +380,7 @@ export function PMWeeklyFormPage() {
         setProjects([fallbackProject]);
         setForm(createDefaultPayload(fallbackProject));
         setDraftStatus('加载失败，已进入离线草稿模式');
-        setProjectForm(cloneProject(fallbackProject));
+        setProjectForm(cloneProject(normalizeProjectOption(fallbackProject)));
         setProjectMode('edit');
         setProjectStatus('离线模式下仅可查看当前项目结构');
       })
@@ -351,9 +396,11 @@ export function PMWeeklyFormPage() {
   }, []);
 
   const selectedProject =
-    projects.find((project) => project.id === form.projectId) ||
-    projects[0] ||
-    fallbackProject;
+    normalizeProjectOption(
+      projects.find((project) => project.id === form.projectId) ||
+        projects[0] ||
+        fallbackProject,
+    );
 
   useEffect(() => {
     if (projectMode === 'edit') {
@@ -361,7 +408,13 @@ export function PMWeeklyFormPage() {
     }
   }, [projectMode, selectedProject]);
 
+  useEffect(() => {
+    setForm((current) => normalizeFormByCurveType(selectedProject, current));
+  }, [selectedProject.curveType, selectedProject.id]);
+
   const activeReport = reports.find((report) => report.id === activeReportId) || null;
+  const isSelectedCurve1 = isCurve1Project(selectedProject.curveType);
+  const isProjectFormCurve1 = isCurve1Project(projectForm.curveType);
 
   const projectReports = useMemo(
     () =>
@@ -416,7 +469,9 @@ export function PMWeeklyFormPage() {
       },
       {
         label: '进度与交付',
-        detail: '进度、交付量、交付金额已填写',
+        detail: isSelectedCurve1
+          ? '进度、交付量、交付金额已填写'
+          : '进度、确认金额与下周推进已填写',
         done:
           form.progressPct >= 0 &&
           form.actualQty >= 0 &&
@@ -434,7 +489,9 @@ export function PMWeeklyFormPage() {
       },
       {
         label: '风险与异常',
-        detail: '风险描述、阻塞事项、建议动作已确认',
+        detail: isSelectedCurve1
+          ? '风险描述、阻塞事项、建议动作已确认'
+          : '风险描述、阻塞事项、部署动作已确认',
         done:
           form.riskDesc.trim().length > 0 &&
           (form.riskLevel === '绿' || form.blockerTitle.trim().length > 0) &&
@@ -446,38 +503,60 @@ export function PMWeeklyFormPage() {
         done: form.nextWeekFocus.trim().length > 0,
       },
     ],
-    [form],
+    [form, isSelectedCurve1],
   );
 
   const filledCount = completionChecks.filter((item) => item.done).length;
   const canSubmit = completionChecks.every((item) => item.done);
 
   const fixedInfoItems = useMemo(
-    () => [
-      { label: '项目名称', value: selectedProject.name, hint: '主数据' },
-      { label: '项目编号', value: selectedProject.id, hint: '只读' },
-      { label: '项目经理', value: selectedProject.pmName, hint: '自动带出' },
-      { label: '曲线类型', value: selectedProject.curveType, hint: '只读' },
-      { label: '标注类型', value: selectedProject.annotationType, hint: '自动带出' },
-      {
-        label: '计划总量',
-        value: `${selectedProject.plannedQty} ${selectedProject.qtyUnit}`,
-        hint: '主数据',
-      },
-      { label: '预算总额', value: toWan(selectedProject.budgetTotal), hint: '主数据' },
-      { label: '默认供应商', value: selectedProject.defaultSupplier, hint: '自动带出' },
-    ],
-    [selectedProject],
+    () => {
+      const baseItems = [
+        { label: '项目名称', value: selectedProject.name, hint: '主数据' },
+        { label: '项目编号', value: selectedProject.id, hint: '只读' },
+        { label: '项目经理', value: selectedProject.pmName, hint: '自动带出' },
+        { label: '曲线类型', value: selectedProject.curveType, hint: '只读' },
+        { label: '预算总额', value: toWan(selectedProject.budgetTotal), hint: '主数据' },
+      ];
+
+      if (isSelectedCurve1) {
+        return [
+          ...baseItems,
+          { label: '标注类型', value: selectedProject.annotationType, hint: '自动带出' },
+          {
+            label: '计划总量',
+            value: `${selectedProject.plannedQty} ${selectedProject.qtyUnit}`,
+            hint: '主数据',
+          },
+          { label: '默认供应商', value: selectedProject.defaultSupplier, hint: '自动带出' },
+        ];
+      }
+
+      return [
+        ...baseItems,
+        { label: '项目口径', value: '私有化部署', hint: '不涉及标注与供应商信息' },
+        { label: '跟踪重点', value: '里程碑 / 预算 / 风险', hint: '每周按部署进度填报' },
+      ];
+    },
+    [isSelectedCurve1, selectedProject],
   );
 
   const comparisonCards = useMemo(() => {
     if (!previousReport) {
       return [
         { label: '进度变化', value: '首次填报', tone: 'neutral' },
-        { label: '本周交付', value: toWan(form.weeklyDeliveryAmount), tone: 'neutral' },
+        {
+          label: isSelectedCurve1 ? '本周交付' : '本周新增成本',
+          value: isSelectedCurve1 ? toWan(form.weeklyDeliveryAmount) : toWan(form.costConsumed),
+          tone: 'neutral',
+        },
         { label: '成本变化', value: toWan(form.costConsumed), tone: 'neutral' },
         { label: '风险等级', value: form.riskLevel, tone: 'neutral' },
-        { label: '修正率变化', value: `${form.modificationRate.toFixed(0)}%`, tone: 'neutral' },
+        {
+          label: isSelectedCurve1 ? '修正率变化' : '本周工时',
+          value: isSelectedCurve1 ? `${form.modificationRate.toFixed(0)}%` : `${form.hoursSpent}h`,
+          tone: 'neutral',
+        },
       ];
     }
 
@@ -488,21 +567,42 @@ export function PMWeeklyFormPage() {
         tone: form.progressPct - previousReport.progressPct >= 0 ? 'positive' : 'negative',
       },
       {
-        label: '本周交付',
+        label: isSelectedCurve1 ? '本周交付' : '成本变化',
         value: formatDelta(
-          form.weeklyDeliveryAmount - previousReport.weeklyDeliveryAmount,
+          (isSelectedCurve1 ? form.weeklyDeliveryAmount : form.costConsumed) -
+            (isSelectedCurve1
+              ? previousReport.weeklyDeliveryAmount
+              : previousReport.costConsumed),
           1,
           ' 万',
         ),
         tone:
-          form.weeklyDeliveryAmount - previousReport.weeklyDeliveryAmount >= 0
+          (isSelectedCurve1 ? form.weeklyDeliveryAmount : form.costConsumed) -
+            (isSelectedCurve1
+              ? previousReport.weeklyDeliveryAmount
+              : previousReport.costConsumed) >=
+          0
             ? 'positive'
             : 'negative',
       },
       {
-        label: '成本变化',
-        value: formatDelta(form.costConsumed - previousReport.costConsumed, 1, ' 万'),
-        tone: form.costConsumed - previousReport.costConsumed <= 0 ? 'positive' : 'negative',
+        label: isSelectedCurve1 ? '成本变化' : '累计金额变化',
+        value: formatDelta(
+          (isSelectedCurve1 ? form.costConsumed : form.amountDelivered) -
+            (isSelectedCurve1
+              ? previousReport.costConsumed
+              : previousReport.amountDelivered),
+          1,
+          ' 万',
+        ),
+        tone:
+          (isSelectedCurve1 ? form.costConsumed : form.amountDelivered) -
+            (isSelectedCurve1
+              ? previousReport.costConsumed
+              : previousReport.amountDelivered) <=
+          0
+            ? 'positive'
+            : 'negative',
       },
       {
         label: '风险等级',
@@ -515,23 +615,35 @@ export function PMWeeklyFormPage() {
               : 'positive',
       },
       {
-        label: '修正率变化',
-        value: formatDelta(form.modificationRate - previousReport.modificationRate, 0, '%'),
+        label: isSelectedCurve1 ? '修正率变化' : '工时变化',
+        value: isSelectedCurve1
+          ? formatDelta(form.modificationRate - previousReport.modificationRate, 0, '%')
+          : formatDelta(form.hoursSpent - previousReport.hoursSpent, 0, 'h'),
         tone:
-          form.modificationRate - previousReport.modificationRate <= 0
+          (isSelectedCurve1
+            ? form.modificationRate - previousReport.modificationRate
+            : form.hoursSpent - previousReport.hoursSpent) <= 0
             ? 'positive'
             : 'negative',
       },
     ];
-  }, [form, previousReport]);
+  }, [form, isSelectedCurve1, previousReport]);
 
   const weeklySummary = useMemo(
-    () => [
-      `${selectedProject.name} 当前进度 ${toPercent(form.progressPct)}，交付完成率 ${toPercent(deliveryRate)}。`,
-      `本周交付 ${toWan(form.weeklyDeliveryAmount)}，累计交付 ${toWan(form.amountDelivered)}，预算消耗率 ${toPercent(costRate)}。`,
-      `质量 ${toPercent(form.qualityPass)}，客户评分 ${form.clientScore.toFixed(1)}，当前状态 ${healthLabel.text}。`,
-      `阻塞事项：${form.blockerTitle || '暂无'}；下周重点：${form.nextWeekFocus || '待补充'}。`,
-    ],
+    () =>
+      isSelectedCurve1
+        ? [
+            `${selectedProject.name} 当前进度 ${toPercent(form.progressPct)}，交付完成率 ${toPercent(deliveryRate)}。`,
+            `本周交付 ${toWan(form.weeklyDeliveryAmount)}，累计交付 ${toWan(form.amountDelivered)}，预算消耗率 ${toPercent(costRate)}。`,
+            `质量 ${toPercent(form.qualityPass)}，客户评分 ${form.clientScore.toFixed(1)}，当前状态 ${healthLabel.text}。`,
+            `阻塞事项：${form.blockerTitle || '暂无'}；下周重点：${form.nextWeekFocus || '待补充'}。`,
+          ]
+        : [
+            `${selectedProject.name} 当前部署进度 ${toPercent(form.progressPct)}，预算消耗率 ${toPercent(costRate)}。`,
+            `本周新增成本 ${toWan(form.costConsumed)}，累计确认金额 ${toWan(form.amountDelivered)}，客户评分 ${form.clientScore.toFixed(1)}。`,
+            `当前风险状态 ${healthLabel.text}；阻塞事项 ${form.blockerTitle || '暂无'}。`,
+            `下周重点：${form.nextWeekFocus || '待补充'}。`,
+          ],
     [
       costRate,
       deliveryRate,
@@ -543,6 +655,7 @@ export function PMWeeklyFormPage() {
       form.qualityPass,
       form.weeklyDeliveryAmount,
       healthLabel.text,
+      isSelectedCurve1,
       selectedProject.name,
     ],
   );
@@ -565,7 +678,9 @@ export function PMWeeklyFormPage() {
 
   function selectReport(report: PmWeeklyReport) {
     setActiveReportId(report.id);
-    setForm(reportToPayload(report));
+    const reportProject =
+      projects.find((project) => project.id === report.projectId) || fallbackProject;
+    setForm(normalizeFormByCurveType(reportProject, reportToPayload(report)));
     setDraftStatus(`已切换到 ${report.projectName} · ${report.weekStart}`);
   }
 
@@ -591,7 +706,17 @@ export function PMWeeklyFormPage() {
     key: K,
     value: ProjectOption[K],
   ) {
-    setProjectForm((current) => ({ ...current, [key]: value }));
+    setProjectForm((current) =>
+      key === 'curveType'
+        ? normalizeProjectOption({
+            ...current,
+            [key]: value,
+          } as ProjectOption)
+        : ({
+            ...current,
+            [key]: value,
+          } as ProjectOption),
+    );
     setProjectStatus(projectMode === 'create' ? '新增项目待保存' : '项目主数据待保存');
   }
 
@@ -603,26 +728,20 @@ export function PMWeeklyFormPage() {
 
     setIsProjectSaving(true);
     try {
+      const normalizedProject = normalizeProjectOption({
+        ...projectForm,
+        id: projectForm.id.trim(),
+        name: projectForm.name.trim(),
+        pmName: projectForm.pmName.trim(),
+        annotationType: projectForm.annotationType.trim(),
+        qtyUnit: projectForm.qtyUnit.trim(),
+        defaultSupplier: projectForm.defaultSupplier.trim(),
+      });
+
       if (projectMode === 'create') {
-        await createProject({
-          ...projectForm,
-          id: projectForm.id.trim(),
-          name: projectForm.name.trim(),
-          pmName: projectForm.pmName.trim(),
-          annotationType: projectForm.annotationType.trim(),
-          qtyUnit: projectForm.qtyUnit.trim(),
-          defaultSupplier: projectForm.defaultSupplier.trim(),
-        });
+        await createProject(normalizedProject);
       } else {
-        await updateProject(projectForm.id, {
-          ...projectForm,
-          id: projectForm.id.trim(),
-          name: projectForm.name.trim(),
-          pmName: projectForm.pmName.trim(),
-          annotationType: projectForm.annotationType.trim(),
-          qtyUnit: projectForm.qtyUnit.trim(),
-          defaultSupplier: projectForm.defaultSupplier.trim(),
-        });
+        await updateProject(projectForm.id, normalizedProject);
       }
 
       const bootstrap = await getPmWeeklyReportsBootstrap();
@@ -651,7 +770,7 @@ export function PMWeeklyFormPage() {
       }
 
       setProjectMode('edit');
-      setProjectForm(cloneProject(syncedProject));
+      setProjectForm(cloneProject(normalizeProjectOption(syncedProject)));
       setProjectStatus(
         projectMode === 'create'
           ? `已新增项目 ${syncedProject.name}`
@@ -667,7 +786,10 @@ export function PMWeeklyFormPage() {
   async function persistReport(status: FormState['status']) {
     setIsSaving(true);
     try {
-      const payload: FormState = { ...form, status };
+      const payload: FormState = normalizeFormByCurveType(selectedProject, {
+        ...form,
+        status,
+      });
 
       if (activeReportId) {
         const updated = await updatePmWeeklyReport(activeReportId, payload);
@@ -817,17 +939,21 @@ export function PMWeeklyFormPage() {
                 <h2>本周填报（仅填写变化项）</h2>
               </div>
               <div className="pm-stat-strip">
-                <div>
-                  <span>交付完成率</span>
-                  <strong>{toPercent(deliveryRate)}</strong>
+              <div>
+                  <span>{isSelectedCurve1 ? '交付完成率' : '当前进度'}</span>
+                  <strong>{isSelectedCurve1 ? toPercent(deliveryRate) : toPercent(form.progressPct)}</strong>
                 </div>
                 <div>
                   <span>预算消耗率</span>
                   <strong>{toPercent(costRate)}</strong>
                 </div>
                 <div>
-                  <span>PM工时成本</span>
-                  <strong>{pmCost.toLocaleString('zh-CN')} 元</strong>
+                  <span>{isSelectedCurve1 ? 'PM工时成本' : '累计确认金额'}</span>
+                  <strong>
+                    {isSelectedCurve1
+                      ? `${pmCost.toLocaleString('zh-CN')} 元`
+                      : toWan(form.amountDelivered)}
+                  </strong>
                 </div>
               </div>
             </div>
@@ -836,8 +962,12 @@ export function PMWeeklyFormPage() {
               <article className="pm-entry-group">
                 <div className="pm-entry-group__head">
                   <div>
-                    <h3>进度与交付</h3>
-                    <p>只填本周变化项，系统保留主数据口径</p>
+                    <h3>{isSelectedCurve1 ? '进度与交付' : '进度与部署'}</h3>
+                    <p>
+                      {isSelectedCurve1
+                        ? '只填本周变化项，系统保留主数据口径'
+                        : '二/三曲线按私有化部署口径汇报，不展示标注数量单位'}
+                    </p>
                   </div>
                   <span className="pm-inline-tag">本周新增</span>
                 </div>
@@ -849,15 +979,25 @@ export function PMWeeklyFormPage() {
                       onValueChange={(value) => updateField('progressPct', value)}
                     />
                   </label>
+                  {isSelectedCurve1 ? (
+                    <label className="pm-field">
+                      <span className="pm-field__label">实际交付量 <em>必填</em></span>
+                      <NumericInput
+                        value={form.actualQty}
+                        onValueChange={(value) => updateField('actualQty', value)}
+                      />
+                    </label>
+                  ) : (
+                    <div className="pm-auto-box pm-auto-box--hint">
+                      <span>私有化部署口径</span>
+                      <strong>不填交付量与数量单位</strong>
+                      <small>二/三曲线重点看里程碑进度、预算执行、阻塞事项和下周推进动作。</small>
+                    </div>
+                  )}
                   <label className="pm-field">
-                    <span className="pm-field__label">实际交付量 <em>必填</em></span>
-                    <NumericInput
-                      value={form.actualQty}
-                      onValueChange={(value) => updateField('actualQty', value)}
-                    />
-                  </label>
-                  <label className="pm-field">
-                    <span className="pm-field__label">本周交付金额</span>
+                    <span className="pm-field__label">
+                      {isSelectedCurve1 ? '本周交付金额' : '本周确认金额'}
+                    </span>
                     <NumericInput
                       allowDecimal
                       step="0.1"
@@ -866,7 +1006,9 @@ export function PMWeeklyFormPage() {
                     />
                   </label>
                   <label className="pm-field">
-                    <span className="pm-field__label">累计交付金额</span>
+                    <span className="pm-field__label">
+                      {isSelectedCurve1 ? '累计交付金额' : '累计确认金额'}
+                    </span>
                     <NumericInput
                       allowDecimal
                       step="0.1"
@@ -1015,92 +1157,116 @@ export function PMWeeklyFormPage() {
                       }
                     />
                   </label>
-                  <label className="pm-field pm-field--full">
-                    <span className="pm-field__label">供应商异常</span>
-                    <textarea
-                      rows={3}
-                      value={form.supplierIssue}
-                      onChange={(event) => updateField('supplierIssue', textAreaValue(event))}
-                    />
-                  </label>
+                  {isSelectedCurve1 ? (
+                    <label className="pm-field pm-field--full">
+                      <span className="pm-field__label">供应商异常</span>
+                      <textarea
+                        rows={3}
+                        value={form.supplierIssue}
+                        onChange={(event) =>
+                          updateField('supplierIssue', textAreaValue(event))
+                        }
+                      />
+                    </label>
+                  ) : (
+                    <div className="pm-auto-box pm-auto-box--hint pm-field--full">
+                      <span>私有化部署项目说明</span>
+                      <strong>风险区仅记录里程碑与部署阻塞</strong>
+                      <small>二/三曲线不填供应商异常，相关问题统一写入风险描述、阻塞事项和建议动作。</small>
+                    </div>
+                  )}
                 </div>
               </article>
 
               <article className="pm-entry-group">
                 <div className="pm-entry-group__head">
                   <div>
-                    <h3>供应商与算法专项</h3>
-                    <p>保留专项字段，但不抢主流程注意力</p>
+                    <h3>{isSelectedCurve1 ? '供应商与算法专项' : '部署专项说明'}</h3>
+                    <p>
+                      {isSelectedCurve1
+                        ? '保留专项字段，但不抢主流程注意力'
+                        : '二/三曲线聚焦部署协同与里程碑推进，不展示供应商与标注算法字段'}
+                    </p>
                   </div>
                   <span className="pm-inline-tag">沿用上周可微调</span>
                 </div>
                 <div className="pm-entry-grid">
-                  <label className="pm-field">
-                    <span className="pm-field__label">供应商名称</span>
-                    <input
-                      value={form.supplierName}
-                      onChange={(event) => updateField('supplierName', event.target.value)}
-                    />
-                  </label>
-                  <label className="pm-field">
-                    <span className="pm-field__label">投入人数</span>
-                    <NumericInput
-                      value={form.supplierHeadcount}
-                      onValueChange={(value) => updateField('supplierHeadcount', value)}
-                    />
-                  </label>
-                  <label className="pm-field">
-                    <span className="pm-field__label">供应商质量%</span>
-                    <NumericInput
-                      value={form.supplierQuality}
-                      onValueChange={(value) => updateField('supplierQuality', value)}
-                    />
-                  </label>
-                  <label className="pm-field">
-                    <span className="pm-field__label">准时率%</span>
-                    <NumericInput
-                      value={form.supplierOtdRate}
-                      onValueChange={(value) => updateField('supplierOtdRate', value)}
-                    />
-                  </label>
-                  <label className="pm-field">
-                    <span className="pm-field__label">配合度%</span>
-                    <NumericInput
-                      value={form.supplierCooperation}
-                      onValueChange={(value) => updateField('supplierCooperation', value)}
-                    />
-                  </label>
-                  <label className="pm-field">
-                    <span className="pm-field__label">算法版本</span>
-                    <input
-                      value={form.algoVersion}
-                      onChange={(event) => updateField('algoVersion', event.target.value)}
-                    />
-                  </label>
-                  <label className="pm-field">
-                    <span className="pm-field__label">修正率%</span>
-                    <NumericInput
-                      value={form.modificationRate}
-                      onValueChange={(value) => updateField('modificationRate', value)}
-                    />
-                  </label>
-                  <label className="pm-field">
-                    <span className="pm-field__label">提效%</span>
-                    <NumericInput
-                      value={form.timeSavePct}
-                      onValueChange={(value) => updateField('timeSavePct', value)}
-                    />
-                  </label>
+                  {isSelectedCurve1 ? (
+                    <>
+                      <label className="pm-field">
+                        <span className="pm-field__label">供应商名称</span>
+                        <input
+                          value={form.supplierName}
+                          onChange={(event) => updateField('supplierName', event.target.value)}
+                        />
+                      </label>
+                      <label className="pm-field">
+                        <span className="pm-field__label">投入人数</span>
+                        <NumericInput
+                          value={form.supplierHeadcount}
+                          onValueChange={(value) => updateField('supplierHeadcount', value)}
+                        />
+                      </label>
+                      <label className="pm-field">
+                        <span className="pm-field__label">供应商质量%</span>
+                        <NumericInput
+                          value={form.supplierQuality}
+                          onValueChange={(value) => updateField('supplierQuality', value)}
+                        />
+                      </label>
+                      <label className="pm-field">
+                        <span className="pm-field__label">准时率%</span>
+                        <NumericInput
+                          value={form.supplierOtdRate}
+                          onValueChange={(value) => updateField('supplierOtdRate', value)}
+                        />
+                      </label>
+                      <label className="pm-field">
+                        <span className="pm-field__label">配合度%</span>
+                        <NumericInput
+                          value={form.supplierCooperation}
+                          onValueChange={(value) => updateField('supplierCooperation', value)}
+                        />
+                      </label>
+                      <label className="pm-field">
+                        <span className="pm-field__label">算法版本</span>
+                        <input
+                          value={form.algoVersion}
+                          onChange={(event) => updateField('algoVersion', event.target.value)}
+                        />
+                      </label>
+                      <label className="pm-field">
+                        <span className="pm-field__label">修正率%</span>
+                        <NumericInput
+                          value={form.modificationRate}
+                          onValueChange={(value) => updateField('modificationRate', value)}
+                        />
+                      </label>
+                      <label className="pm-field">
+                        <span className="pm-field__label">提效%</span>
+                        <NumericInput
+                          value={form.timeSavePct}
+                          onValueChange={(value) => updateField('timeSavePct', value)}
+                        />
+                      </label>
+                      <label className="pm-field pm-field--full">
+                        <span className="pm-field__label">算法迭代建议</span>
+                        <textarea
+                          rows={3}
+                          value={form.algoAdvice}
+                          onChange={(event) => updateField('algoAdvice', textAreaValue(event))}
+                        />
+                      </label>
+                    </>
+                  ) : (
+                    <div className="pm-auto-box pm-auto-box--hint pm-field--full">
+                      <span>当前口径</span>
+                      <strong>二/三曲线不填供应商与标注算法专项</strong>
+                      <small>请重点在“风险与异常”“备注”“下周重点”中描述部署进展、环境联调和需协同事项。</small>
+                    </div>
+                  )}
                   <label className="pm-field pm-field--full">
-                    <span className="pm-field__label">算法迭代建议</span>
-                    <textarea
-                      rows={3}
-                      value={form.algoAdvice}
-                      onChange={(event) => updateField('algoAdvice', textAreaValue(event))}
-                    />
-                  </label>
-                  <label className="pm-field pm-field--full">
-                    <span className="pm-field__label">备注</span>
+                    <span className="pm-field__label">{isSelectedCurve1 ? '备注' : '部署备注'}</span>
                     <textarea
                       rows={3}
                       value={form.pmComment}
@@ -1181,29 +1347,39 @@ export function PMWeeklyFormPage() {
                   <option value="三曲线">三曲线</option>
                 </select>
               </label>
-              <label className="pm-field">
-                <span className="pm-field__label">标注类型</span>
-                <input
-                  value={projectForm.annotationType}
-                  onChange={(event) =>
-                    updateProjectField('annotationType', event.target.value)
-                  }
-                />
-              </label>
-              <label className="pm-field">
-                <span className="pm-field__label">计划总量</span>
-                <NumericInput
-                  value={projectForm.plannedQty}
-                  onValueChange={(value) => updateProjectField('plannedQty', value)}
-                />
-              </label>
-              <label className="pm-field">
-                <span className="pm-field__label">数量单位</span>
-                <input
-                  value={projectForm.qtyUnit}
-                  onChange={(event) => updateProjectField('qtyUnit', event.target.value)}
-                />
-              </label>
+              {isProjectFormCurve1 ? (
+                <>
+                  <label className="pm-field">
+                    <span className="pm-field__label">标注类型</span>
+                    <input
+                      value={projectForm.annotationType}
+                      onChange={(event) =>
+                        updateProjectField('annotationType', event.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="pm-field">
+                    <span className="pm-field__label">计划总量</span>
+                    <NumericInput
+                      value={projectForm.plannedQty}
+                      onValueChange={(value) => updateProjectField('plannedQty', value)}
+                    />
+                  </label>
+                  <label className="pm-field">
+                    <span className="pm-field__label">数量单位</span>
+                    <input
+                      value={projectForm.qtyUnit}
+                      onChange={(event) => updateProjectField('qtyUnit', event.target.value)}
+                    />
+                  </label>
+                </>
+              ) : (
+                <div className="pm-auto-box pm-auto-box--hint pm-field--full">
+                  <span>私有化部署项目</span>
+                  <strong>不维护标注类型、数量单位、默认供应商</strong>
+                  <small>二/三曲线只维护项目经理、预算总额和后续部署进度，周填报按里程碑与预算口径汇报。</small>
+                </div>
+              )}
               <label className="pm-field">
                 <span className="pm-field__label">预算总额</span>
                 <NumericInput
@@ -1213,15 +1389,17 @@ export function PMWeeklyFormPage() {
                   onValueChange={(value) => updateProjectField('budgetTotal', value)}
                 />
               </label>
-              <label className="pm-field pm-field--full">
-                <span className="pm-field__label">默认供应商</span>
-                <input
-                  value={projectForm.defaultSupplier}
-                  onChange={(event) =>
-                    updateProjectField('defaultSupplier', event.target.value)
-                  }
-                />
-              </label>
+              {isProjectFormCurve1 ? (
+                <label className="pm-field pm-field--full">
+                  <span className="pm-field__label">默认供应商</span>
+                  <input
+                    value={projectForm.defaultSupplier}
+                    onChange={(event) =>
+                      updateProjectField('defaultSupplier', event.target.value)
+                    }
+                  />
+                </label>
+              ) : null}
             </div>
             <div className="pm-actions pm-actions--stack">
               <button className="pm-btn pm-btn--light" onClick={beginCreateProject}>
@@ -1335,9 +1513,15 @@ export function PMWeeklyFormPage() {
                 <strong>{pmCost.toLocaleString('zh-CN')} 元</strong>
               </div>
               <div>
-                <span>算法优先级</span>
+                <span>{isSelectedCurve1 ? '算法优先级' : '项目口径'}</span>
                 <strong>
-                  {form.modificationRate > 20 ? 'P0' : form.modificationRate > 12 ? 'P1' : 'P2'}
+                  {isSelectedCurve1
+                    ? form.modificationRate > 20
+                      ? 'P0'
+                      : form.modificationRate > 12
+                        ? 'P1'
+                        : 'P2'
+                    : '私有化部署'}
                 </strong>
               </div>
               <div>

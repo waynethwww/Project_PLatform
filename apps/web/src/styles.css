@@ -418,6 +418,17 @@ textarea {
   background: #e2f5ec;
 }
 
+.wr-empty {
+  padding: 24px 18px;
+  border: 1px dashed #c9d3e7;
+  border-radius: 12px;
+  background: #f7f9fd;
+  color: #55627b;
+  font-size: 12px;
+  line-height: 1.8;
+  text-align: center;
+}
+
 .wr-table-wrap {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -1460,6 +1471,11 @@ td {
   border: 1px solid #e4e8f0;
   border-radius: 12px;
   background: #fafbfd;
+}
+
+.pm-auto-box--hint {
+  border-style: dashed;
+  background: #f7f9fd;
 }
 
 .pm-entry-groups {

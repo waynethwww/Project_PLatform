@@ -135,7 +135,7 @@ export class PmReportsService {
   private async readStore(): Promise<PmWeeklyReportsStore> {
     await this.ensureStoreFile();
     const raw = await readFile(this.runtimeStorePath, 'utf-8');
-    return JSON.parse(raw) as PmWeeklyReportsStore;
+    return this.normalizeStore(JSON.parse(raw) as PmWeeklyReportsStore);
   }
 
   private async writeStore(store: PmWeeklyReportsStore) {
@@ -175,8 +175,113 @@ export class PmReportsService {
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
-  private buildProjectRecord(payload: UpsertProjectDto): ProjectOption {
+  private normalizeStore(store: PmWeeklyReportsStore): PmWeeklyReportsStore {
+    const normalizedProjects = this.sortProjects(
+      store.projects.map((project) => this.normalizeProjectRecord(project)),
+    );
+    const projectMap = new Map(
+      normalizedProjects.map((project) => [project.id, project]),
+    );
+
     return {
+      projects: normalizedProjects,
+      reports: store.reports.map((report) =>
+        this.normalizeReportRecord(
+          report,
+          projectMap.get(report.projectId),
+        ),
+      ),
+    };
+  }
+
+  private isCurve1Project(curveType: string) {
+    return curveType.trim() === '一曲线';
+  }
+
+  private normalizeProjectRecord(project: ProjectOption): ProjectOption {
+    const baseProject = {
+      id: project.id.trim(),
+      name: project.name.trim(),
+      pmName: project.pmName.trim(),
+      curveType: project.curveType.trim(),
+      annotationType: project.annotationType.trim(),
+      plannedQty: project.plannedQty,
+      qtyUnit: project.qtyUnit.trim(),
+      budgetTotal: project.budgetTotal,
+      defaultSupplier: project.defaultSupplier.trim(),
+    };
+
+    if (this.isCurve1Project(baseProject.curveType)) {
+      return baseProject;
+    }
+
+    return {
+      ...baseProject,
+      annotationType: '',
+      plannedQty: 0,
+      qtyUnit: '',
+      defaultSupplier: '',
+    };
+  }
+
+  private normalizeReportRecord(
+    report: PmWeeklyReportRecord,
+    project?: ProjectOption,
+  ): PmWeeklyReportRecord {
+    const normalizedProject = project
+      ? this.normalizeProjectRecord(project)
+      : this.normalizeProjectRecord({
+          id: report.projectId,
+          name: report.projectName,
+          pmName: report.pmName,
+          curveType: report.curveType,
+          annotationType: report.annotationType,
+          plannedQty: report.plannedQty,
+          qtyUnit: report.qtyUnit,
+          budgetTotal: report.budgetTotal,
+          defaultSupplier: report.supplierName,
+        });
+
+    const baseReport: PmWeeklyReportRecord = {
+      ...report,
+      projectId: normalizedProject.id,
+      projectName: normalizedProject.name,
+      pmName: normalizedProject.pmName,
+      curveType: normalizedProject.curveType,
+      annotationType: normalizedProject.annotationType,
+      plannedQty: normalizedProject.plannedQty,
+      qtyUnit: normalizedProject.qtyUnit,
+      budgetTotal: normalizedProject.budgetTotal,
+    };
+
+    if (this.isCurve1Project(normalizedProject.curveType)) {
+      return {
+        ...baseReport,
+        supplierName: report.supplierName.trim(),
+        supplierIssue: report.supplierIssue.trim(),
+        algoVersion: report.algoVersion.trim(),
+        algoAdvice: report.algoAdvice.trim(),
+      };
+    }
+
+    return {
+      ...baseReport,
+      actualQty: 0,
+      supplierName: '',
+      supplierHeadcount: 0,
+      supplierQuality: 0,
+      supplierOtdRate: 0,
+      supplierCooperation: 0,
+      supplierIssue: '',
+      algoVersion: '',
+      modificationRate: 0,
+      timeSavePct: 0,
+      algoAdvice: '',
+    };
+  }
+
+  private buildProjectRecord(payload: UpsertProjectDto): ProjectOption {
+    return this.normalizeProjectRecord({
       id: payload.id.trim(),
       name: payload.name.trim(),
       pmName: payload.pmName.trim(),
@@ -186,7 +291,7 @@ export class PmReportsService {
       qtyUnit: payload.qtyUnit.trim(),
       budgetTotal: payload.budgetTotal,
       defaultSupplier: payload.defaultSupplier.trim(),
-    };
+    });
   }
 
   private sortProjects(projects: ProjectOption[]) {
@@ -202,8 +307,7 @@ export class PmReportsService {
   ): PmWeeklyReportRecord {
     const shouldSyncSupplier =
       !report.supplierName || report.supplierName === previousProject.defaultSupplier;
-
-    return {
+    const syncedReport = {
       ...report,
       projectName: nextProject.name,
       pmName: nextProject.pmName,
@@ -215,6 +319,8 @@ export class PmReportsService {
       supplierName: shouldSyncSupplier ? nextProject.defaultSupplier : report.supplierName,
       updatedAt: new Date().toISOString(),
     };
+
+    return this.normalizeReportRecord(syncedReport, nextProject);
   }
 
   private buildReportRecord(args: {
@@ -225,7 +331,7 @@ export class PmReportsService {
     updatedAt: string;
   }): PmWeeklyReportRecord {
     const { id, payload, project, createdAt, updatedAt } = args;
-    return {
+    return this.normalizeReportRecord({
       id,
       projectId: project.id,
       projectName: project.name,
@@ -266,7 +372,7 @@ export class PmReportsService {
       status: payload.status,
       createdAt,
       updatedAt,
-    };
+    }, project);
   }
 
   private getApiRootDir() {

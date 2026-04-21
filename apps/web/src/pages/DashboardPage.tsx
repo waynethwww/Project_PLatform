@@ -117,6 +117,10 @@ function progressUnit(value: number) {
   return value > 1 ? value / 100 : value;
 }
 
+function isCurve1Project(curveType: string) {
+  return curveType === '一曲线';
+}
+
 function compareReports(left: PmWeeklyReport, right: PmWeeklyReport) {
   const weekCompare = left.weekStart.localeCompare(right.weekStart);
   if (weekCompare !== 0) {
@@ -169,8 +173,12 @@ function loadTone(hours: number): { tone: PmLoadTone; label: string } {
 function getRiskImpact(report: PmWeeklyReport) {
   const text = `${report.riskDesc} ${report.supplierIssue} ${report.pmComment}`;
 
-  if (/供应商|外包|退出/.test(text)) {
+  if (isCurve1Project(report.curveType) && /供应商|外包|退出/.test(text)) {
     return '供应商稳定性';
+  }
+
+  if (!isCurve1Project(report.curveType)) {
+    return '影响部署里程碑';
   }
 
   if (/质量|验收|通过率/.test(text)) {
@@ -350,7 +358,7 @@ export function DashboardPage() {
   }, [scopedReports]);
 
   const curve1Reports = useMemo(
-    () => latestReports.filter((report) => report.curveType === '一曲线'),
+    () => latestReports.filter((report) => isCurve1Project(report.curveType)),
     [latestReports],
   );
 
@@ -394,7 +402,7 @@ export function DashboardPage() {
   const annotationContractRows = useMemo(() => {
     const grouped = new Map<string, number>();
 
-    for (const report of latestReports) {
+    for (const report of curve1Reports) {
       grouped.set(
         report.annotationType,
         (grouped.get(report.annotationType) || 0) + report.budgetTotal,
@@ -404,12 +412,12 @@ export function DashboardPage() {
     return Array.from(grouped.entries())
       .map(([name, value]) => ({ name, value }))
       .sort((left, right) => right.value - left.value);
-  }, [latestReports]);
+  }, [curve1Reports]);
 
   const annotationWeeklyRows = useMemo(() => {
     const grouped = new Map<string, number>();
 
-    for (const report of periodReports) {
+    for (const report of periodReports.filter((report) => isCurve1Project(report.curveType))) {
       grouped.set(
         report.annotationType,
         (grouped.get(report.annotationType) || 0) + report.weeklyDeliveryAmount,
@@ -424,10 +432,17 @@ export function DashboardPage() {
   const algoRows = useMemo(
     () =>
       [...latestReports]
-        .filter((report) => report.algoVersion || report.modificationRate > 0)
+        .filter(
+          (report) =>
+            isCurve1Project(report.curveType) &&
+            (report.algoVersion || report.modificationRate > 0),
+        )
         .sort((left, right) => right.modificationRate - left.modificationRate),
     [latestReports],
   );
+
+  const hasCurve1Data = curve1Reports.length > 0;
+  const hasCurve23Data = curve23Reports.length > 0;
 
   const curve1CostRows = useMemo(
     () =>
@@ -591,7 +606,7 @@ export function DashboardPage() {
         items: [
           `一曲线本周交付金额 ${moneyWithUnit(overview.curve1_delivery_in_period)}。`,
           `一曲线当前快照项目 ${curve1Reports.length} 个，其中健康 ${curve1HealthCounts.healthy} 个，健康率 ${percentFromUnit(overview.curve1_health_rate)}。`,
-          `二/三曲线当前项目 ${curve23Reports.length} 个，健康率 ${percentFromUnit(overview.curve23_health_rate)}。`,
+          `二/三曲线私有化部署项目 ${curve23Reports.length} 个，健康率 ${percentFromUnit(overview.curve23_health_rate)}。`,
         ],
       },
       {
@@ -600,7 +615,7 @@ export function DashboardPage() {
         items: [
           `高/中风险共 ${riskRows.length} 条，需优先盯住 ${topRiskNames.length > 0 ? topRiskNames.join('、') : '当前重点项目'}。`,
           `一曲线成本风险项目 ${curve1CostRows.filter((row) => row.deviation > 0).length} 个。`,
-          `二/三曲线预算偏离项目 ${curve23ExecutionRows.filter((row) => row.deviation > 0).length} 个。`,
+          `二/三曲线部署预算偏离项目 ${curve23ExecutionRows.filter((row) => row.deviation > 0).length} 个。`,
         ],
       },
       {
@@ -614,6 +629,7 @@ export function DashboardPage() {
             ? `各 PM 工时中，${pmCards[0].pmName} ${pmCards[0].totalHours}h 最高。`
             : '当前暂无 PM 工时统计。',
           '当前汇报页已统一按“本周交付 + 最新快照”双口径呈现。',
+          '二/三曲线已切换为私有化部署口径，不再展示标注和供应商信息。',
         ],
       },
       {
@@ -684,13 +700,13 @@ export function DashboardPage() {
       {
         label: '二/三曲线合同额（万）',
         value: money(overview.curve23_contract_amount),
-        subtext: `平台/交付项目 · ${curveBreakdown.curve2 + curveBreakdown.curve3} 项目`,
+        subtext: `私有化部署 · ${curveBreakdown.curve2 + curveBreakdown.curve3} 项目`,
         color: COLOR.indigo,
       },
       {
         label: '二/三曲线已耗成本（万）',
         value: money(curve23Reports.reduce((sum, report) => sum + report.costConsumed, 0)),
-        subtext: '当前系统暂按预算执行口径汇报',
+        subtext: '按预算与里程碑执行口径汇报',
         color: '#3A4FA0',
       },
       {
@@ -1216,13 +1232,19 @@ export function DashboardPage() {
               </div>
             </div>
             <div>
-              <div className="wr-chart-title wr-chart-title--indigo">二/三曲线里程碑进度</div>
-              <div className="wr-chart wr-chart--220">
-                <ReactECharts option={curve23ProgressOption} style={{ height: '100%' }} />
-              </div>
-              <div className="wr-note wr-note--green">
-                当前系统先按预算执行口径判定在控/偏离，后续补齐人天字段后可恢复原口径。
-              </div>
+              <div className="wr-chart-title wr-chart-title--indigo">二/三曲线部署进度</div>
+              {hasCurve23Data ? (
+                <>
+                  <div className="wr-chart wr-chart--220">
+                    <ReactECharts option={curve23ProgressOption} style={{ height: '100%' }} />
+                  </div>
+                  <div className="wr-note wr-note--green">
+                    二/三曲线已按私有化部署口径展示，仅保留里程碑进度、预算执行和风险信息。
+                  </div>
+                </>
+              ) : (
+                <div className="wr-empty">当前筛选下无二/三曲线部署项目。</div>
+              )}
             </div>
           </div>
         </div>
@@ -1230,122 +1252,132 @@ export function DashboardPage() {
 
       <section className="wr-sec">
         <div className="wr-sec__hdr wr-sec__hdr--blue">
-          <h2>📦 ② 标注类型价值分布 · 合同金额 vs 本周交付</h2>
+          <h2>📦 ② 一曲线标注类型价值分布 · 合同金额 vs 本周交付</h2>
         </div>
         <div className="wr-sec__body">
-          <div className="wr-grid wr-grid--2 wr-grid--center">
-            <div>
-              <div className="wr-chart-title wr-chart-title--blue">合同金额占比（万元）</div>
-              <div className="wr-chart wr-chart--ring-wide">
-                <ReactECharts option={annotationContractOption} style={{ height: '100%' }} />
+          {hasCurve1Data ? (
+            <div className="wr-grid wr-grid--2 wr-grid--center">
+              <div>
+                <div className="wr-chart-title wr-chart-title--blue">合同金额占比（万元）</div>
+                <div className="wr-chart wr-chart--ring-wide">
+                  <ReactECharts option={annotationContractOption} style={{ height: '100%' }} />
+                </div>
+              </div>
+              <div>
+                <div className="wr-chart-title wr-chart-title--blue">本周交付金额占比（万元）</div>
+                <div className="wr-chart wr-chart--ring-wide">
+                  <ReactECharts option={annotationWeeklyOption} style={{ height: '100%' }} />
+                </div>
+                <div className="wr-note wr-note--amber">
+                  当前 <b>{topWeeklyType?.name || '重点类型'}</b> 本周交付金额占比最高，为{' '}
+                  <b>
+                    {topWeeklyType && overview.curve1_delivery_in_period > 0
+                      ? percentFromUnit(topWeeklyType.value / overview.curve1_delivery_in_period)
+                      : '0%'}
+                  </b>
+                  。
+                </div>
               </div>
             </div>
-            <div>
-              <div className="wr-chart-title wr-chart-title--blue">本周交付金额占比（万元）</div>
-              <div className="wr-chart wr-chart--ring-wide">
-                <ReactECharts option={annotationWeeklyOption} style={{ height: '100%' }} />
-              </div>
-              <div className="wr-note wr-note--amber">
-                当前 <b>{topWeeklyType?.name || '重点类型'}</b> 本周交付金额占比最高，为{' '}
-                <b>
-                  {topWeeklyType && overview.curve1_delivery_in_period > 0
-                    ? percentFromUnit(topWeeklyType.value / overview.curve1_delivery_in_period)
-                    : '0%'}
-                </b>
-                。
-              </div>
-            </div>
-          </div>
+          ) : (
+            <div className="wr-empty">当前筛选下无一曲线项目，本区不展示标注类型与交付分布。</div>
+          )}
         </div>
       </section>
 
       <section className="wr-sec">
         <div className="wr-sec__hdr wr-sec__hdr--purple">
-          <h2>🤖 ③ 算法优化专项 · 修正率 & 提效分析</h2>
+          <h2>🤖 ③ 一曲线算法优化专项 · 修正率 & 提效分析</h2>
         </div>
         <div className="wr-sec__body">
-          <div className="wr-grid wr-grid--2">
-            <div>
-              <div className="wr-chart-title wr-chart-title--purple">本期算法修正率（越低越好）</div>
-              <div className="wr-chart wr-chart--180">
-                <ReactECharts option={algoOption} style={{ height: '100%' }} />
+          {hasCurve1Data ? (
+            <>
+              <div className="wr-grid wr-grid--2">
+                <div>
+                  <div className="wr-chart-title wr-chart-title--purple">本期算法修正率（越低越好）</div>
+                  <div className="wr-chart wr-chart--180">
+                    <ReactECharts option={algoOption} style={{ height: '100%' }} />
+                  </div>
+                  <div className="wr-note" style={{ borderLeftColor: COLOR.purple }}>
+                    📌 目标线：点云/图像类 ≤ 15% · 当前以最新周填报记录为准
+                  </div>
+                </div>
+                <div>
+                  <div className="wr-chart-title wr-chart-title--purple">本期算法效果详情</div>
+                  <div className="wr-table-wrap">
+                    <table className="wr-table">
+                      <thead>
+                        <tr>
+                          <th>标注类型</th>
+                          <th>批次日期</th>
+                          <th>算法版本</th>
+                          <th>修正率%</th>
+                          <th>本期样本量</th>
+                          <th>提效%</th>
+                          <th>优化优先级</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {algoRows.map((row) => (
+                          <tr key={`${row.projectId}-${row.weekStart}`}>
+                            <td className="wr-table__project">{row.annotationType}</td>
+                            <td>{row.weekStart}</td>
+                            <td>{row.algoVersion || '—'}</td>
+                            <td>
+                              <b
+                                style={{
+                                  color: row.modificationRate > 15 ? COLOR.red : COLOR.teal,
+                                }}
+                              >
+                                {percentFromRaw(row.modificationRate)}
+                              </b>
+                            </td>
+                            <td>{row.actualQty.toLocaleString('zh-CN')}</td>
+                            <td>{percentFromRaw(row.timeSavePct)}</td>
+                            <td>
+                              <span
+                                className={
+                                  row.modificationRate > 30
+                                    ? 'wr-tag wr-tag--red'
+                                    : row.modificationRate > 15
+                                      ? 'wr-tag wr-tag--amber'
+                                      : 'wr-tag wr-tag--blue'
+                                }
+                              >
+                                {row.modificationRate > 30
+                                  ? 'P0 重点优化'
+                                  : row.modificationRate > 15
+                                    ? 'P1 优先优化'
+                                    : 'P2 持续跟踪'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-              <div className="wr-note" style={{ borderLeftColor: COLOR.purple }}>
-                📌 目标线：点云/图像类 ≤ 15% · 当前以最新周填报记录为准
+              <div className="wr-note" style={{ background: '#F3E5F5', borderLeftColor: COLOR.purple }}>
+                🚀 <b>算法观察：</b>最高修正率为{' '}
+                <b>{algoRows[0]?.annotationType || '—'}</b> {algoRows[0] ? percentFromRaw(algoRows[0].modificationRate) : '—'}；
+                最高提效为 <b>{[...algoRows].sort((a, b) => b.timeSavePct - a.timeSavePct)[0]?.annotationType || '—'}</b>{' '}
+                {[...algoRows].sort((a, b) => b.timeSavePct - a.timeSavePct)[0]
+                  ? percentFromRaw([...algoRows].sort((a, b) => b.timeSavePct - a.timeSavePct)[0].timeSavePct)
+                  : '—'}
+                。
               </div>
-            </div>
-            <div>
-              <div className="wr-chart-title wr-chart-title--purple">本期算法效果详情</div>
-              <div className="wr-table-wrap">
-                <table className="wr-table">
-                  <thead>
-                    <tr>
-                      <th>标注类型</th>
-                      <th>批次日期</th>
-                      <th>算法版本</th>
-                      <th>修正率%</th>
-                      <th>本期样本量</th>
-                      <th>提效%</th>
-                      <th>优化优先级</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {algoRows.map((row) => (
-                      <tr key={`${row.projectId}-${row.weekStart}`}>
-                        <td className="wr-table__project">{row.annotationType}</td>
-                        <td>{row.weekStart}</td>
-                        <td>{row.algoVersion || '—'}</td>
-                        <td>
-                          <b
-                            style={{
-                              color: row.modificationRate > 15 ? COLOR.red : COLOR.teal,
-                            }}
-                          >
-                            {percentFromRaw(row.modificationRate)}
-                          </b>
-                        </td>
-                        <td>{row.actualQty.toLocaleString('zh-CN')}</td>
-                        <td>{percentFromRaw(row.timeSavePct)}</td>
-                        <td>
-                          <span
-                            className={
-                              row.modificationRate > 30
-                                ? 'wr-tag wr-tag--red'
-                                : row.modificationRate > 15
-                                  ? 'wr-tag wr-tag--amber'
-                                  : 'wr-tag wr-tag--blue'
-                            }
-                          >
-                            {row.modificationRate > 30
-                              ? 'P0 重点优化'
-                              : row.modificationRate > 15
-                                ? 'P1 优先优化'
-                                : 'P2 持续跟踪'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-          <div className="wr-note" style={{ background: '#F3E5F5', borderLeftColor: COLOR.purple }}>
-            🚀 <b>算法观察：</b>最高修正率为{' '}
-            <b>{algoRows[0]?.annotationType || '—'}</b> {algoRows[0] ? percentFromRaw(algoRows[0].modificationRate) : '—'}；
-            最高提效为 <b>{[...algoRows].sort((a, b) => b.timeSavePct - a.timeSavePct)[0]?.annotationType || '—'}</b>{' '}
-            {[...algoRows].sort((a, b) => b.timeSavePct - a.timeSavePct)[0]
-              ? percentFromRaw([...algoRows].sort((a, b) => b.timeSavePct - a.timeSavePct)[0].timeSavePct)
-              : '—'}
-            。
-          </div>
+            </>
+          ) : (
+            <div className="wr-empty">当前筛选下无一曲线项目，本区不展示标注算法指标。</div>
+          )}
         </div>
       </section>
 
       <section className="wr-sec">
         <div className="wr-sec__hdr wr-sec__hdr--navy">
-          <h2>💰 ④ 成本与人天执行专项 · 分曲线统计</h2>
-          <span className="wr-badge">健康度口径：超支=红色 · 未超支=绿色 · 未开始默认绿色</span>
+          <h2>💰 ④ 成本与执行专项 · 分曲线统计</h2>
+          <span className="wr-badge">一曲线按标注交付口径；二/三曲线按私有化部署口径</span>
         </div>
         <div className="wr-sec__body">
           <div className="wr-chart-title wr-chart-title--navy">一曲线成本健康状态（按项目）</div>
@@ -1406,7 +1438,7 @@ export function DashboardPage() {
           </div>
 
           <div className="wr-chart-title wr-chart-title--indigo wr-chart-title--mt">
-            二/三曲线执行明细（预算进度口径）
+            二/三曲线部署执行明细（预算 / 里程碑口径）
           </div>
           <div className="wr-table-wrap">
             <table className="wr-table">
@@ -1458,18 +1490,20 @@ export function DashboardPage() {
             </table>
           </div>
           <div className="wr-note wr-note--amber">
-            当前系统尚未恢复人天明细字段，本期先按预算进度口径显示二/三曲线执行情况。
+            二/三曲线为私有化部署项目，本区不展示标注数量、标注单位和供应商信息。
           </div>
         </div>
       </section>
 
       <section className="wr-sec">
         <div className="wr-sec__hdr wr-sec__hdr--amber">
-          <h2>🎯 ⑤ 质量管控专项 · 当前质量问题全景</h2>
+          <h2>🎯 ⑤ 一曲线质量管控专项 · 当前质量问题全景</h2>
           <span className="wr-badge">基于一曲线项目最新快照</span>
         </div>
         <div className="wr-sec__body">
-          <div className="wr-grid wr-grid--2">
+          {hasCurve1Data ? (
+            <>
+              <div className="wr-grid wr-grid--2">
             <div>
               <div className="wr-chart-title wr-chart-title--amber">一曲线：有验收数据的项目质量对比</div>
               <div className="wr-chart wr-chart--220">
@@ -1560,6 +1594,10 @@ export function DashboardPage() {
             </tbody>
             </table>
           </div>
+            </>
+          ) : (
+            <div className="wr-empty">当前筛选下无一曲线项目，本区不展示质量验收与标注交付信息。</div>
+          )}
         </div>
       </section>
 
@@ -1626,19 +1664,25 @@ export function DashboardPage() {
 
       <section className="wr-sec">
         <div className="wr-sec__hdr wr-sec__hdr--pm">
-          <h2>👤 ⑧ 人员管理专项 · PM交付分布 & 负载分析</h2>
+          <h2>👤 ⑧ 人员管理专项 · 一曲线交付分布 & 全员负载分析</h2>
           <span className="wr-badge">统计周：{filters.endDate}</span>
         </div>
         <div className="wr-sec__body">
           <div className="wr-grid wr-grid--2">
             <div>
               <div className="wr-chart-title wr-chart-title--pm">一曲线项目经理本周交付金额占比</div>
-              <div className="wr-chart wr-chart--ring-compact">
-                <ReactECharts option={pmWeeklyShareOption} style={{ height: '100%' }} />
-              </div>
-              <div className="wr-note wr-note--green">
-                仅展示本周交付金额 &gt; 0 的项目经理；取值来自周填报本周交付金额字段。
-              </div>
+              {hasCurve1Data ? (
+                <>
+                  <div className="wr-chart wr-chart--ring-compact">
+                    <ReactECharts option={pmWeeklyShareOption} style={{ height: '100%' }} />
+                  </div>
+                  <div className="wr-note wr-note--green">
+                    仅展示本周交付金额 &gt; 0 的项目经理；取值来自周填报本周交付金额字段。
+                  </div>
+                </>
+              ) : (
+                <div className="wr-empty">当前筛选下无一曲线项目，交付占比图不适用。</div>
+              )}
             </div>
             <div>
               <div className="wr-chart-title wr-chart-title--pm">各PM项目时间投入分布（堆叠图）</div>
