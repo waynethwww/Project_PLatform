@@ -1581,10 +1581,28 @@ td {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  align-self: start;
 }
 
 .pm-side-card {
   padding: 18px;
+}
+
+.pm-side-card--overview {
+  position: sticky;
+  top: 78px;
+}
+
+.pm-side-card__section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #eef1f5;
+}
+
+.pm-side-card__section h4 {
+  margin: 0 0 10px;
+  color: #182131;
+  font-size: 14px;
 }
 
 .pm-mini-btn {
@@ -1682,6 +1700,17 @@ td {
   margin-top: 12px;
 }
 
+.pm-check-list--compact {
+  gap: 8px;
+}
+
+.pm-check-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
 .pm-check-item.is-done {
   border-color: #c5e8d3;
   background: #edf9f1;
@@ -1693,16 +1722,40 @@ td {
 }
 
 .pm-check-item span {
-  display: inline-block;
-  margin-bottom: 6px;
   color: #6a768a;
   font-size: 12px;
 }
 
-.pm-check-item strong {
+.pm-check-item__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  font-weight: 700;
+}
+
+.pm-check-item__body {
+  min-width: 0;
+}
+
+.pm-check-item__body strong {
   display: block;
   color: #182131;
   font-size: 14px;
+}
+
+.pm-check-item__body small {
+  margin-top: 2px;
+}
+
+.pm-check-item__state {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
 }
 
 .pm-summary-list {
@@ -1727,6 +1780,10 @@ td {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-top: 12px;
+}
+
+.pm-side-metrics--compact {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .pm-actions {
@@ -1830,6 +1887,10 @@ td {
   .pm-layout {
     grid-template-columns: 1fr;
   }
+
+  .pm-side-card--overview {
+    position: static;
+  }
 }
 
 @media (max-width: 960px) {
@@ -1895,6 +1956,15 @@ td {
   .pm-side-metrics,
   .pm-compare-grid {
     grid-template-columns: 1fr;
+  }
+
+  .pm-check-item {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .pm-check-item__state {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .pm-page-actions,

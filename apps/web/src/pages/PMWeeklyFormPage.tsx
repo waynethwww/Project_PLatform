@@ -1051,6 +1051,29 @@ export function PMWeeklyFormPage() {
               </article>
             </div>
           </section>
+
+          <section className="pm-panel pm-panel--compare">
+            <div className="pm-panel__header">
+              <div>
+                <p>与上周对比</p>
+                <h2>变化摘要</h2>
+              </div>
+              <span className="pm-chip">
+                {previousReport ? `对比 ${previousReport.weekStart}` : '暂无可对比的上一期数据'}
+              </span>
+            </div>
+            <div className="pm-compare-grid">
+              {comparisonCards.map((item) => (
+                <article
+                  key={item.label}
+                  className={`pm-compare-card pm-compare-card--${item.tone}`}
+                >
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </article>
+              ))}
+            </div>
+          </section>
         </main>
 
         <aside className="pm-side">
@@ -1203,43 +1226,43 @@ export function PMWeeklyFormPage() {
             </div>
           </section>
 
-          <section className="pm-side-card">
-            <p>提交前检查</p>
-            <h3>提交前检查</h3>
+          <section className="pm-side-card pm-side-card--overview">
+            <p>提交概览</p>
+            <h3>提交概览</h3>
             <div className="pm-check-summary">
               <strong>
                 已填写 {filledCount}/{completionChecks.length}
               </strong>
               <span>{canSubmit ? '可提交' : '仍有待补项'}</span>
             </div>
-            <div className="pm-check-list">
+            <div className="pm-check-list pm-check-list--compact">
               {completionChecks.map((item) => (
-                <div key={item.label} className={`pm-check-item ${item.done ? 'is-done' : 'is-pending'}`}>
-                  <span>{item.done ? '已完成' : '待补充'}</span>
-                  <strong>{item.label}</strong>
-                  <small>{item.detail}</small>
+                <div
+                  key={item.label}
+                  className={`pm-check-item ${item.done ? 'is-done' : 'is-pending'}`}
+                >
+                  <span className="pm-check-item__icon">{item.done ? '✓' : '!'}</span>
+                  <div className="pm-check-item__body">
+                    <strong>{item.label}</strong>
+                    <small>{item.detail}</small>
+                  </div>
+                  <span className="pm-check-item__state">
+                    {item.done ? '已完成' : '待补充'}
+                  </span>
                 </div>
               ))}
             </div>
-          </section>
-
-          <section className="pm-side-card">
-            <p>自动摘要</p>
-            <h3>本周经营摘要</h3>
-            <ul className="pm-summary-list">
-              {weeklySummary.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-            <div className="pm-side-note">
-              提交后同步周汇报视图；当前草稿状态：{draftStatus}
+            <div className="pm-side-card__section">
+              <h4>本周经营摘要</h4>
+              <ul className="pm-summary-list">
+                {weeklySummary.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
             </div>
-          </section>
-
-          <section className="pm-side-card">
-            <p>提交状态</p>
-            <h3>系统状态</h3>
-            <div className="pm-side-metrics">
+            <div className="pm-side-card__section">
+              <h4>系统状态</h4>
+              <div className="pm-side-metrics pm-side-metrics--compact">
               <div>
                 <span>风险等级</span>
                 <strong>{form.riskLevel}</strong>
@@ -1267,34 +1290,22 @@ export function PMWeeklyFormPage() {
                 <strong>{activeReport ? formatDateTime(activeReport.updatedAt) : '尚未保存'}</strong>
               </div>
             </div>
+            </div>
+            <div className="pm-side-note">
+              提交后同步周汇报视图；当前草稿状态：{draftStatus}
+            </div>
             <div className="pm-actions pm-actions--side">
-              <button className="pm-btn pm-btn--danger" onClick={handleDelete} disabled={isSaving}>
+              <button
+                className="pm-btn pm-btn--danger"
+                onClick={handleDelete}
+                disabled={isSaving}
+              >
                 删除当前
               </button>
             </div>
           </section>
         </aside>
       </div>
-
-      <section className="pm-panel pm-panel--compare">
-        <div className="pm-panel__header">
-          <div>
-            <p>与上周对比</p>
-            <h2>变化摘要</h2>
-          </div>
-          <span className="pm-chip">
-            {previousReport ? `对比 ${previousReport.weekStart}` : '暂无可对比的上一期数据'}
-          </span>
-        </div>
-        <div className="pm-compare-grid">
-          {comparisonCards.map((item) => (
-            <article key={item.label} className={`pm-compare-card pm-compare-card--${item.tone}`}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </article>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }
