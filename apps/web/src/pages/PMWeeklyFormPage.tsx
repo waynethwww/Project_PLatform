@@ -1,6 +1,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AppSelect } from '../components/AppSelect';
+import { DropdownLayout, getDropdownLayout } from '../lib/dropdown';
 import {
   archiveProject,
   createProject,
@@ -20,6 +21,7 @@ import {
 type FormState = PmWeeklyReportPayload;
 type ProjectEditorMode = 'create' | 'edit';
 type ProjectLifecycleAction = 'archive' | 'recycle' | 'restore';
+type PmEntryView = 'list' | 'detail';
 type NumericInputProps = {
   value: number;
   onValueChange: (value: number) => void;
@@ -71,6 +73,71 @@ const PROJECT_MANAGER_OPTIONS = [
   { label: '刘宗岩', keywords: ['liuzongyan', 'lzy', 'liu', 'zong', 'yan'] },
   { label: '刘紫煜', keywords: ['liuziyu', 'lzy', 'liu', 'zi', 'yu'] },
   { label: '王聪', keywords: ['wangcong', 'wc', 'wang', 'cong'] },
+];
+
+const PROJECT_MANAGER_KEYWORD_MAP = new Map(
+  PROJECT_MANAGER_OPTIONS.map((option) => [option.label, option.keywords || []]),
+);
+
+const PINYIN_INITIAL_MAP: Record<string, string> = {
+  刘: 'l',
+  兴: 'x',
+  祖: 'z',
+  王: 'w',
+  天: 't',
+  浩: 'h',
+  贾: 'j',
+  金: 'j',
+  鹏: 'p',
+  郑: 'z',
+  威: 'w',
+  格: 'g',
+  张: 'z',
+  艺: 'y',
+  缤: 'b',
+  李: 'l',
+  仕: 's',
+  伟: 'w',
+  冯: 'f',
+  德: 'd',
+  隆: 'l',
+  闫: 'y',
+  成: 'c',
+  宗: 'z',
+  岩: 'y',
+  紫: 'z',
+  煜: 'y',
+  聪: 'c',
+  车: 'c',
+  道: 'd',
+  线: 'x',
+  语: 'y',
+  义: 'y',
+  分: 'f',
+  割: 'g',
+  劳: 'l',
+  斯: 's',
+  莱: 'l',
+  奥: 'a',
+  迪: 'd',
+  收: 's',
+  购: 'g',
+  阿: 'a',
+  里: 'l',
+  巴: 'b',
+  商: 's',
+  机: 'j',
+  地: 'd',
+  铁: 't',
+};
+
+const PROJECT_NAME_KEYWORD_RULES = [
+  { match: '车道线', keywords: ['cdx', 'chedaoxian'] },
+  { match: '语义分割', keywords: ['yyfg', 'yuyifenge'] },
+  { match: '劳斯莱斯', keywords: ['lsls', 'laosilaisi'] },
+  { match: '奥迪', keywords: ['ad', 'aodi'] },
+  { match: '收购阿里巴巴商机', keywords: ['sgalbbsj', 'shougoualibabashangji'] },
+  { match: '地铁', keywords: ['dt', 'ditie'] },
 ];
 
 const ANNOTATION_TYPE_OPTIONS = [
@@ -277,6 +344,45 @@ function matchesSearchKeyword(keyword: string, values: Array<string | number | u
   );
 }
 
+function toInitialsKeyword(value: string) {
+  return Array.from(value)
+    .map((char) => {
+      if (/[a-z0-9]/i.test(char)) {
+        return char.toLowerCase();
+      }
+
+      return PINYIN_INITIAL_MAP[char] || '';
+    })
+    .join('');
+}
+
+function buildProjectSearchKeywords(project: ProjectOption) {
+  const keywords = new Set<string>();
+
+  [
+    project.name,
+    project.id,
+    project.pmName,
+    project.curveType,
+    toInitialsKeyword(project.name),
+    toInitialsKeyword(project.pmName),
+  ]
+    .filter(Boolean)
+    .forEach((item) => keywords.add(String(item).toLowerCase()));
+
+  (PROJECT_MANAGER_KEYWORD_MAP.get(project.pmName) || []).forEach((keyword) =>
+    keywords.add(keyword.toLowerCase()),
+  );
+
+  PROJECT_NAME_KEYWORD_RULES.forEach((rule) => {
+    if (project.name.includes(rule.match)) {
+      rule.keywords.forEach((keyword) => keywords.add(keyword.toLowerCase()));
+    }
+  });
+
+  return Array.from(keywords);
+}
+
 function paginateItems<T>(items: T[], page: number, pageSize = MANAGER_PAGE_SIZE) {
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
   const currentPage = Math.min(Math.max(page, 1), totalPages);
@@ -339,6 +445,108 @@ function CloseIcon() {
         strokeWidth="1.8"
         strokeLinecap="round"
       />
+    </svg>
+  );
+}
+
+function HistoryIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M4.4 6.2H2.8v2.6M4.1 7.9a5.9 5.9 0 1 1-1 3.4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M10 6.3v3.6l2.5 1.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ArchiveIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M3.4 5.2h13.2v2.7H3.4V5.2Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M5.1 7.9v6.7a1 1 0 0 0 1 1h7.8a1 1 0 0 0 1-1V7.9"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8 10.4h4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M4.7 5.8h10.6"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M7.6 4.1h4.8"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M6 5.8l.7 9a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-9"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.4 8.6v4.4M11.6 8.6v4.4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M10 4.2v11.6M4.2 10h11.6"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <circle cx="4.5" cy="10" r="1.3" />
+      <circle cx="10" cy="10" r="1.3" />
+      <circle cx="15.5" cy="10" r="1.3" />
     </svg>
   );
 }
@@ -620,7 +828,12 @@ function NumericInput(props: NumericInputProps) {
 function ComboInput(props: ComboInputProps) {
   const { value, options, placeholder, ariaLabel, onChange } = props;
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
+  const [menuLayout, setMenuLayout] = useState<DropdownLayout>({
+    direction: 'down' as const,
+    maxHeight: 220,
+  });
 
   const filteredOptions = useMemo(() => {
     const keyword = value.trim().toLowerCase();
@@ -657,6 +870,26 @@ function ComboInput(props: ComboInputProps) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    function updateMenuLayout() {
+      setMenuLayout(getDropdownLayout(rootRef.current, inputRef.current, 220, 6));
+    }
+
+    const frameId = window.requestAnimationFrame(updateMenuLayout);
+
+    window.addEventListener('resize', updateMenuLayout);
+    document.addEventListener('scroll', updateMenuLayout, true);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener('resize', updateMenuLayout);
+      document.removeEventListener('scroll', updateMenuLayout, true);
+    };
+  }, [filteredOptions.length, open]);
+
   function handleSelect(nextValue: string) {
     onChange(nextValue);
     setOpen(false);
@@ -669,6 +902,7 @@ function ComboInput(props: ComboInputProps) {
     >
       <div className="pm-combo__control">
         <input
+          ref={inputRef}
           value={value}
           placeholder={placeholder}
           aria-label={ariaLabel}
@@ -688,7 +922,16 @@ function ComboInput(props: ComboInputProps) {
         </button>
       </div>
       {open ? (
-        <div className="pm-combo__menu" role="listbox" aria-label={ariaLabel}>
+        <div
+          className="pm-combo__menu"
+          role="listbox"
+          aria-label={ariaLabel}
+          style={{
+            maxHeight: `${Math.max(menuLayout.maxHeight, 0)}px`,
+            top: menuLayout.direction === 'down' ? 'calc(100% + 6px)' : 'auto',
+            bottom: menuLayout.direction === 'up' ? 'calc(100% + 6px)' : 'auto',
+          }}
+        >
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option) => (
               <button
@@ -751,6 +994,7 @@ function PaginationBar(props: PaginationBarProps) {
 export function PMWeeklyFormPage() {
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [reports, setReports] = useState<PmWeeklyReport[]>([]);
+  const [entryView, setEntryView] = useState<PmEntryView>('list');
   const [activeReportId, setActiveReportId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(createDefaultPayload(fallbackProject));
   const [draftStatus, setDraftStatus] = useState('正在加载本地填报数据...');
@@ -764,6 +1008,7 @@ export function PMWeeklyFormPage() {
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [isRecycleModalOpen, setIsRecycleModalOpen] = useState(false);
   const [isReportHistoryModalOpen, setIsReportHistoryModalOpen] = useState(false);
+  const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
   const [pendingProjectAction, setPendingProjectAction] = useState<PendingProjectAction>(null);
   const [archiveKeyword, setArchiveKeyword] = useState('');
   const [archiveCurveFilter, setArchiveCurveFilter] = useState('');
@@ -775,6 +1020,10 @@ export function PMWeeklyFormPage() {
   const [reportCurveFilter, setReportCurveFilter] = useState('');
   const [reportStatusFilter, setReportStatusFilter] = useState('');
   const [reportPage, setReportPage] = useState(1);
+  const [projectListKeyword, setProjectListKeyword] = useState('');
+  const [projectListPmFilter, setProjectListPmFilter] = useState('');
+  const [projectListPage, setProjectListPage] = useState(1);
+  const projectMenuRef = useRef<HTMLDivElement | null>(null);
 
   const activeProjects = useMemo(
     () => projects.filter((project) => project.status === 'active'),
@@ -836,6 +1085,56 @@ export function PMWeeklyFormPage() {
     [reportCurveFilter, reportKeyword, reportStatusFilter, reports],
   );
 
+  const latestReportByProject = useMemo(() => {
+    const nextMap = new Map<string, PmWeeklyReport>();
+    for (const report of [...reports].sort(compareReports)) {
+      if (!nextMap.has(report.projectId)) {
+        nextMap.set(report.projectId, report);
+      }
+    }
+    return nextMap;
+  }, [reports]);
+
+  const projectManagerFilterOptions = useMemo(() => {
+    const managers = Array.from(
+      new Set(activeProjects.map((project) => project.pmName).filter(Boolean)),
+    ).sort((left, right) => left.localeCompare(right, 'zh-CN'));
+
+    return [
+      { value: '', label: '全部项目经理' },
+      ...managers.map((manager) => ({ value: manager, label: manager })),
+    ];
+  }, [activeProjects]);
+
+  const filteredProjectEntries = useMemo(
+    () =>
+      activeProjects
+        .filter(
+          (project) =>
+            (!projectListPmFilter || project.pmName === projectListPmFilter) &&
+            matchesSearchKeyword(projectListKeyword, buildProjectSearchKeywords(project)),
+        )
+        .sort((left, right) => {
+          const leftLatest = latestReportByProject.get(left.id);
+          const rightLatest = latestReportByProject.get(right.id);
+
+          if (leftLatest && rightLatest) {
+            return compareReports(leftLatest, rightLatest);
+          }
+
+          if (leftLatest) {
+            return -1;
+          }
+
+          if (rightLatest) {
+            return 1;
+          }
+
+          return left.name.localeCompare(right.name, 'zh-CN');
+        }),
+    [activeProjects, latestReportByProject, projectListKeyword, projectListPmFilter],
+  );
+
   const archivedPagination = useMemo(
     () => paginateItems(filteredArchivedProjects, archivePage),
     [archivePage, filteredArchivedProjects],
@@ -849,6 +1148,11 @@ export function PMWeeklyFormPage() {
   const reportPagination = useMemo(
     () => paginateItems(filteredHistoryReports, reportPage),
     [filteredHistoryReports, reportPage],
+  );
+
+  const projectListPagination = useMemo(
+    () => paginateItems(filteredProjectEntries, projectListPage),
+    [filteredProjectEntries, projectListPage],
   );
 
   useEffect(() => {
@@ -911,13 +1215,15 @@ export function PMWeeklyFormPage() {
     };
   }, []);
 
-  const selectedProject =
-    normalizeProjectOption(
+  const selectedProject = useMemo(() => {
+    const currentProject =
       projects.find((project) => project.id === form.projectId) ||
-        activeProjects[0] ||
-        projects[0] ||
-        fallbackProject,
-    );
+      projects.find((project) => project.status === 'active') ||
+      projects[0] ||
+      fallbackProject;
+
+    return normalizeProjectOption(currentProject);
+  }, [form.projectId, projects]);
 
   useEffect(() => {
     if (projectMode === 'edit') {
@@ -933,6 +1239,31 @@ export function PMWeeklyFormPage() {
   }, [isProjectModalOpen, projectMode]);
 
   useEffect(() => {
+    if (!isProjectMenuOpen) {
+      return undefined;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!projectMenuRef.current?.contains(event.target as Node)) {
+        setIsProjectMenuOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsProjectMenuOpen(false);
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isProjectMenuOpen]);
+
+  useEffect(() => {
     setArchivePage(1);
   }, [archiveCurveFilter, archiveKeyword, isArchiveModalOpen]);
 
@@ -943,6 +1274,10 @@ export function PMWeeklyFormPage() {
   useEffect(() => {
     setReportPage(1);
   }, [isReportHistoryModalOpen, reportCurveFilter, reportKeyword, reportStatusFilter]);
+
+  useEffect(() => {
+    setProjectListPage(1);
+  }, [projectListKeyword, projectListPmFilter]);
 
   useEffect(() => {
     setForm((current) => normalizeFormByCurveType(selectedProject, current));
@@ -1033,6 +1368,19 @@ export function PMWeeklyFormPage() {
     return { text: '在控', tone: 'ok' as const };
   }, [costRate, form.qualityPass, primaryRisk.level]);
 
+  const projectListStats = useMemo(
+    () => ({
+      activeCount: activeProjects.length,
+      draftCount: activeProjects.filter(
+        (project) => latestReportByProject.get(project.id)?.status === 'draft',
+      ).length,
+      submittedCount: activeProjects.filter(
+        (project) => latestReportByProject.get(project.id)?.status === 'submitted',
+      ).length,
+    }),
+    [activeProjects, latestReportByProject],
+  );
+
   const completionChecks = useMemo(
     () => [
       {
@@ -1085,6 +1433,10 @@ export function PMWeeklyFormPage() {
 
   const filledCount = completionChecks.filter((item) => item.done).length;
   const canSubmit = completionChecks.every((item) => item.done);
+  const contextTitle = activeReport
+    ? `${selectedProject.name} · ${form.weekStart}`
+    : `${selectedProject.name} · 新草稿`;
+  const contextDetail = isLoading ? '正在加载本地填报数据...' : draftStatus;
 
   const fixedInfoItems = useMemo(
     () => {
@@ -1379,6 +1731,7 @@ export function PMWeeklyFormPage() {
       return;
     }
 
+    setIsProjectMenuOpen(false);
     setPendingProjectAction({
       type: action,
       project: selectedProject,
@@ -1398,20 +1751,45 @@ export function PMWeeklyFormPage() {
   function handleProjectChange(projectId: string) {
     const nextProject =
       activeProjects.find((project) => project.id === projectId) || fallbackProject;
-    setForm((current) => ({
-      ...createDefaultPayload(nextProject, current.weekStart),
-      status: 'draft',
-    }));
-    setActiveReportId(null);
-    setDraftStatus('已切换项目，当前为新草稿');
+    openProjectDetail(nextProject);
   }
 
   function selectReport(report: PmWeeklyReport) {
-    setActiveReportId(report.id);
     const reportProject =
       projects.find((project) => project.id === report.projectId) || fallbackProject;
-    setForm(normalizeFormByCurveType(reportProject, reportToPayload(report)));
-    setDraftStatus(`已切换到 ${report.projectName} · ${report.weekStart}`);
+    openProjectDetail(reportProject, report.id);
+  }
+
+  function openProjectDetail(project: ProjectOption, preferredReportId?: string | null) {
+    const targetReport =
+      (preferredReportId
+        ? reports.find((report) => report.id === preferredReportId)
+        : [...reports]
+            .sort(compareReports)
+            .find((report) => report.projectId === project.id)) || null;
+
+    setProjectMode('edit');
+    setProjectForm(cloneProject(normalizeProjectOption(project)));
+
+    if (targetReport) {
+      setActiveReportId(targetReport.id);
+      setForm(normalizeFormByCurveType(project, reportToPayload(targetReport)));
+      setDraftStatus(`已进入 ${project.name} · ${targetReport.weekStart}`);
+    } else {
+      const nextWeekStart = form.weekStart || getWeekStart();
+      setActiveReportId(null);
+      setForm(
+        normalizeFormByCurveType(project, createDefaultPayload(project, nextWeekStart)),
+      );
+      setDraftStatus(`已进入 ${project.name}，当前为新草稿`);
+    }
+
+    setEntryView('detail');
+    if (typeof window !== 'undefined') {
+      window.requestAnimationFrame(() =>
+        window.scrollTo({ top: 0, behavior: 'smooth' }),
+      );
+    }
   }
 
   function createNewDraft() {
@@ -1421,6 +1799,7 @@ export function PMWeeklyFormPage() {
   }
 
   function beginCreateProject() {
+    setIsProjectMenuOpen(false);
     setProjectMode('create');
     setProjectForm(createEmptyProject());
     setProjectStatus('新增项目模式：保存后即可在周填报中选择该项目');
@@ -1503,6 +1882,7 @@ export function PMWeeklyFormPage() {
       if (projectMode === 'create') {
         setActiveReportId(null);
         setForm(createDefaultPayload(syncedProject, form.weekStart || getWeekStart()));
+        setEntryView('detail');
         setDraftStatus(`已新增项目 ${syncedProject.name}，可继续填写首个周报`);
         setIsProjectModalOpen(false);
         if (typeof window !== 'undefined') {
@@ -1616,95 +1996,270 @@ export function PMWeeklyFormPage() {
 
   return (
     <div className="dashboard-shell pm-form-shell">
-      <header className="pm-page-header">
+      <header
+        className={`pm-page-header ${
+          entryView === 'list' ? 'pm-page-header--compact pm-page-header--list' : ''
+        }`}
+      >
         <div>
-          <p className="pm-page-header__eyebrow">PM 周填报</p>
-          <h1>PM 周填报</h1>
-          <p className="pm-page-header__sub">固定信息抽离后，仅填本周变化项</p>
+          {entryView === 'list' ? null : (
+            <p className="pm-page-header__eyebrow">PM 周填报</p>
+          )}
+          <h1>{entryView === 'list' ? 'PM 项目列表' : 'PM 周填报'}</h1>
+          {entryView === 'list' ? null : (
+            <p className="pm-page-header__sub">固定信息抽离后，仅填本周变化项</p>
+          )}
         </div>
         <div className="pm-page-actions">
-          <button className="pm-btn pm-btn--light pm-btn--accent" onClick={beginCreateProject}>
-            新增项目
-          </button>
-          <button className="pm-btn pm-btn--light" onClick={() => (window.location.hash = '#/weekly-report')}>
-            返回
-          </button>
-          <button className="pm-btn pm-btn--light" onClick={createNewDraft}>
-            新建草稿
-          </button>
-          <button
-            className="pm-btn pm-btn--light"
-            onClick={() => void persistReport('draft')}
-            disabled={isSaving}
-          >
-            {activeReportId ? '保存修改' : '保存草稿'}
-          </button>
-          <button
-            className="pm-btn pm-btn--primary"
-            onClick={() => void persistReport('submitted')}
-            disabled={isSaving}
-          >
-            {isSaving ? '处理中...' : '提交周报'}
-          </button>
+          <div className="pm-page-actions__group pm-page-actions__group--secondary">
+            {entryView === 'list' ? (
+              <button
+                className="pm-btn pm-btn--quiet"
+                onClick={() => (window.location.hash = '#/weekly-report')}
+              >
+                返回周汇报
+              </button>
+            ) : (
+              <button
+                className="pm-btn pm-btn--quiet"
+                onClick={() => {
+                  setEntryView('list');
+                  window.requestAnimationFrame(() =>
+                    window.scrollTo({ top: 0, behavior: 'smooth' }),
+                  );
+                }}
+              >
+                返回项目列表
+              </button>
+            )}
+          </div>
+          <div className="pm-page-actions__group pm-page-actions__group--primary">
+            {entryView === 'list' ? (
+              <button
+                type="button"
+                className="pm-icon-btn pm-icon-btn--primary"
+                onClick={beginCreateProject}
+                title="新增项目"
+                aria-label="新增项目"
+              >
+                <PlusIcon />
+              </button>
+            ) : (
+              <>
+                <button className="pm-btn pm-btn--light" onClick={createNewDraft}>
+                  新建草稿
+                </button>
+                <button
+                  className="pm-btn pm-btn--accent"
+                  onClick={() => void persistReport('draft')}
+                  disabled={isSaving}
+                >
+                  {activeReportId ? '保存修改' : '保存草稿'}
+                </button>
+                <button
+                  className="pm-btn pm-btn--primary"
+                  onClick={() => void persistReport('submitted')}
+                  disabled={isSaving}
+                >
+                  {isSaving ? '处理中...' : '提交周报'}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
-      <section className="pm-context-bar">
-        <div className="pm-context-grid">
-          <label className="pm-field pm-field--project-picker">
-            <span className="pm-field__label">项目名称</span>
-            <AppSelect
-              value={form.projectId}
-              onChange={handleProjectChange}
-              ariaLabel="项目名称"
-              size="compact"
-              options={activeProjects.map((project) => ({
-                value: project.id,
-                label: project.name,
-              }))}
-            />
-          </label>
-          <label className="pm-field">
-            <span className="pm-field__label">周期</span>
-            <input
-              type="date"
-              value={form.weekStart}
-              onChange={(event) => updateField('weekStart', event.target.value)}
-            />
-          </label>
-          <div className="pm-context-status">
-            <div className="pm-context-meta">
+      {entryView === 'list' ? (
+        <>
+          <section className="pm-panel pm-panel--project-list">
+            <div className="pm-panel__header pm-panel__header--project-list">
+              <div className="pm-project-list-heading">
+                <h2>项目菜单</h2>
+                <div className="pm-project-list-stats">
+                  <span className="pm-badge pm-badge--ok">活跃 {projectListStats.activeCount}</span>
+                  <span className="pm-badge pm-badge--warn">草稿 {projectListStats.draftCount}</span>
+                  <span className="pm-badge">已提交 {projectListStats.submittedCount}</span>
+                </div>
+              </div>
+              <div className="pm-project-list-tools">
+                <label className="pm-field pm-field--search pm-field--search-slim">
+                  <input
+                    value={projectListKeyword}
+                    aria-label="搜索项目"
+                    placeholder="搜索项目 / PM / 编号"
+                    onChange={(event) => setProjectListKeyword(event.target.value)}
+                  />
+                </label>
+                <label className="pm-field pm-field--filter pm-field--filter-slim">
+                  <AppSelect
+                    value={projectListPmFilter}
+                    onChange={setProjectListPmFilter}
+                    ariaLabel="项目经理筛选"
+                    size="compact"
+                    options={projectManagerFilterOptions}
+                  />
+                </label>
+              </div>
+            </div>
+            <div className="pm-project-list">
+              {filteredProjectEntries.length === 0 ? (
+                <div className="pm-records__empty">没有匹配的项目，请调整搜索条件</div>
+              ) : (
+                projectListPagination.items.map((project, index) => {
+                  const latestReport = latestReportByProject.get(project.id) || null;
+                  const statusClass = latestReport
+                    ? latestReport.status === 'submitted'
+                      ? 'pm-badge pm-badge--ok'
+                      : 'pm-badge pm-badge--warn'
+                    : 'pm-badge';
+
+                  return (
+                    <button
+                      key={project.id}
+                      type="button"
+                      className={`pm-project-entry ${
+                        project.id === selectedProject.id ? 'is-current' : ''
+                      }`}
+                      onClick={() => openProjectDetail(project)}
+                    >
+                      <span className="pm-list-index">
+                        {String(projectListPagination.startIndex + index + 1).padStart(2, '0')}
+                      </span>
+                      <span className="pm-project-entry__body">
+                        <span className="pm-project-entry__top">
+                          <strong>{project.name}</strong>
+                          <span className={statusClass}>
+                            {latestReport ? recordStatusLabel(latestReport.status) : '未开始'}
+                          </span>
+                        </span>
+                        <span className="pm-project-entry__meta">
+                          <span>编号 {project.id}</span>
+                          <span>项目经理 {project.pmName || '待分配'}</span>
+                          <span>{project.curveType || '未配置曲线'}</span>
+                        </span>
+                        <span className="pm-project-entry__sub">
+                          <span>
+                            最近周期 {latestReport ? latestReport.weekStart : '暂无记录'}
+                          </span>
+                          <span>
+                            最近更新 {latestReport ? formatDateTime(latestReport.updatedAt) : '尚未保存'}
+                          </span>
+                        </span>
+                      </span>
+                      <span className="pm-project-entry__cta">进入填报</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+            {filteredProjectEntries.length > 0 ? (
+              <PaginationBar
+                currentPage={projectListPagination.currentPage}
+                totalPages={projectListPagination.totalPages}
+                onPageChange={setProjectListPage}
+              />
+            ) : null}
+          </section>
+        </>
+      ) : (
+        <>
+          <section className="pm-context-bar">
+        <div className="pm-workbench">
+          <div className="pm-workbench__filters">
+            <label className="pm-field pm-workbench__field pm-workbench__field--project">
+              <span className="pm-field__label">项目</span>
+              <AppSelect
+                value={form.projectId}
+                onChange={handleProjectChange}
+                ariaLabel="项目名称"
+                size="compact"
+                options={activeProjects.map((project) => ({
+                  value: project.id,
+                  label: project.name,
+                }))}
+              />
+            </label>
+            <label className="pm-field pm-workbench__field pm-workbench__field--date">
+              <span className="pm-field__label">周期</span>
+              <input
+                type="date"
+                value={form.weekStart}
+                onChange={(event) => updateField('weekStart', event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="pm-workbench__summary">
+            <div className="pm-workbench__chips">
               <span className={`pm-badge pm-badge--${healthLabel.tone}`}>健康状态：{healthLabel.text}</span>
               <span className="pm-badge">{activeReport ? recordStatusLabel(activeReport.status) : '未保存'}</span>
-              <span className="pm-badge">草稿状态：{isLoading ? '加载中...' : draftStatus}</span>
             </div>
-            <div className="pm-context-actions">
-              <button className="pm-mini-btn pm-mini-btn--soft" onClick={() => setIsReportHistoryModalOpen(true)}>
-                提交记录
+            <strong>{contextTitle}</strong>
+            <small>{contextDetail}</small>
+          </div>
+          <div className="pm-workbench__actions">
+            <button className="pm-mini-btn pm-mini-btn--soft" onClick={() => setIsReportHistoryModalOpen(true)}>
+              <HistoryIcon />
+              <span>提交记录</span>
+            </button>
+            <button className="pm-mini-btn pm-mini-btn--soft" onClick={() => setIsArchiveModalOpen(true)}>
+              <ArchiveIcon />
+              <span>归档</span>
+            </button>
+            <button
+              type="button"
+              className="pm-icon-btn"
+              onClick={() => setIsRecycleModalOpen(true)}
+              aria-label="打开回收站"
+              title="回收站"
+            >
+              <TrashIcon />
+            </button>
+            <div
+              ref={projectMenuRef}
+              className={`pm-action-menu ${isProjectMenuOpen ? 'is-open' : ''}`}
+            >
+              <button
+                type="button"
+                className="pm-icon-btn"
+                aria-label="打开项目管理菜单"
+                title="项目管理"
+                onClick={() => setIsProjectMenuOpen((current) => !current)}
+              >
+                <MoreIcon />
               </button>
-              <button className="pm-mini-btn pm-mini-btn--soft" onClick={() => setIsArchiveModalOpen(true)}>
-                归档管理
-              </button>
-              <button className="pm-mini-btn pm-mini-btn--soft" onClick={() => setIsRecycleModalOpen(true)}>
-                回收站
-              </button>
-              {selectedProject.status === 'active' ? (
-                <>
+              {isProjectMenuOpen ? (
+                <div className="pm-action-menu__dropdown">
                   <button
-                    className="pm-mini-btn"
-                    onClick={() => openProjectActionConfirm('archive')}
-                    disabled={isProjectSaving || selectedProject.id === fallbackProject.id}
+                    type="button"
+                    className="pm-action-menu__item"
+                    onClick={beginCreateProject}
                   >
-                    归档项目
+                    <PlusIcon />
+                    <span>新增项目</span>
                   </button>
-                  <button
-                    className="pm-mini-btn pm-mini-btn--danger"
-                    onClick={() => openProjectActionConfirm('recycle')}
-                    disabled={isProjectSaving || selectedProject.id === fallbackProject.id}
-                  >
-                    移入回收站
-                  </button>
-                </>
+                  {selectedProject.status === 'active' ? (
+                    <>
+                      <button
+                        type="button"
+                        className="pm-action-menu__item"
+                        onClick={() => openProjectActionConfirm('archive')}
+                        disabled={isProjectSaving || selectedProject.id === fallbackProject.id}
+                      >
+                        <ArchiveIcon />
+                        <span>归档当前项目</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="pm-action-menu__item pm-action-menu__item--danger"
+                        onClick={() => openProjectActionConfirm('recycle')}
+                        disabled={isProjectSaving || selectedProject.id === fallbackProject.id}
+                      >
+                        <TrashIcon />
+                        <span>移入回收站</span>
+                      </button>
+                    </>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           </div>
@@ -2240,11 +2795,13 @@ export function PMWeeklyFormPage() {
           </section>
         </aside>
       </div>
+        </>
+      )}
 
       {isProjectModalOpen ? (
         <div className="pm-modal" role="dialog" aria-modal="true" aria-labelledby="pm-project-modal-title">
           <div className="pm-modal__backdrop" onClick={closeProjectModal} />
-          <section className="pm-modal__panel">
+          <section className="pm-modal__panel pm-modal__panel--project">
             <div className="pm-modal__header">
               <div>
                 <p>项目主数据</p>
@@ -2650,13 +3207,13 @@ export function PMWeeklyFormPage() {
                 新建草稿
               </button>
             </div>
-            <div className="pm-manager-toolbar">
-              <div className="pm-manager-toolbar__filters">
-                <label className="pm-field pm-field--search">
+            <div className="pm-manager-toolbar pm-manager-toolbar--history">
+              <div className="pm-manager-toolbar__filters pm-manager-toolbar__filters--history">
+                <label className="pm-field pm-field--search pm-field--search-compact">
                   <span className="pm-field__label">查找记录</span>
                   <input
                     value={reportKeyword}
-                    placeholder="按项目名称 / 编号 / PM / 周期搜索"
+                    placeholder="搜项目 / 编号 / PM / 周期"
                     onChange={(event) => setReportKeyword(event.target.value)}
                   />
                 </label>
@@ -2697,22 +3254,24 @@ export function PMWeeklyFormPage() {
                       setIsReportHistoryModalOpen(false);
                     }}
                   >
-                    <div className="pm-record__top">
+                    <div className="pm-record__main">
                       <div className="pm-record__headline">
                         <span className="pm-list-index">
                           {String(reportPagination.startIndex + index + 1).padStart(2, '0')}
                         </span>
                         <strong>{report.projectName}</strong>
                       </div>
-                      <span>{recordStatusLabel(report.status)}</span>
+                      <div className="pm-record__meta">
+                        <span>{report.weekStart}</span>
+                        <span>{report.curveType}</span>
+                        <span>{report.pmName}</span>
+                      </div>
                     </div>
-                    <div className="pm-record__meta">
-                      <span>{report.weekStart}</span>
-                      <span>{report.pmName}</span>
-                    </div>
-                    <div className="pm-record__meta">
-                      <span>{report.curveType}</span>
-                      <span>更新于 {formatDateTime(report.updatedAt)}</span>
+                    <div className="pm-record__aside">
+                      <span className={`pm-record__status pm-record__status--${report.status}`}>
+                        {recordStatusLabel(report.status)}
+                      </span>
+                      <small>更新于 {formatDateTime(report.updatedAt)}</small>
                     </div>
                   </button>
                 ))

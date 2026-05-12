@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { DropdownLayout, getDropdownLayout } from '../lib/dropdown';
+
 export type SelectOption = {
   value: string;
   label: string;
@@ -32,7 +34,12 @@ export function AppSelect(props: AppSelectProps) {
     ariaLabel,
   } = props;
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [open, setOpen] = useState(false);
+  const [menuLayout, setMenuLayout] = useState<DropdownLayout>({
+    direction: 'down' as const,
+    maxHeight: 260,
+  });
 
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) || null,
@@ -64,6 +71,26 @@ export function AppSelect(props: AppSelectProps) {
     setOpen(false);
   }, [value]);
 
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    function updateMenuLayout() {
+      setMenuLayout(getDropdownLayout(rootRef.current, triggerRef.current, 260, 8));
+    }
+
+    const frameId = window.requestAnimationFrame(updateMenuLayout);
+
+    window.addEventListener('resize', updateMenuLayout);
+    document.addEventListener('scroll', updateMenuLayout, true);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener('resize', updateMenuLayout);
+      document.removeEventListener('scroll', updateMenuLayout, true);
+    };
+  }, [open, options.length]);
+
   function handleSelect(nextValue: string) {
     setOpen(false);
     onChange(nextValue);
@@ -81,6 +108,7 @@ export function AppSelect(props: AppSelectProps) {
       )}
     >
       <button
+        ref={triggerRef}
         type="button"
         className="app-select__trigger"
         onClick={() => !disabled && setOpen((current) => !current)}
@@ -101,7 +129,16 @@ export function AppSelect(props: AppSelectProps) {
       </button>
 
       {open ? (
-        <div className="app-select__menu" role="listbox" aria-label={ariaLabel}>
+        <div
+          className="app-select__menu"
+          role="listbox"
+          aria-label={ariaLabel}
+          style={{
+            maxHeight: `${Math.max(menuLayout.maxHeight, 0)}px`,
+            top: menuLayout.direction === 'down' ? 'calc(100% + 8px)' : 'auto',
+            bottom: menuLayout.direction === 'up' ? 'calc(100% + 8px)' : 'auto',
+          }}
+        >
           {options.map((option) => {
             const isSelected = option.value === value;
 

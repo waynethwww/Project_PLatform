@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   createExpertNetworkReport,
@@ -9,11 +9,17 @@ import {
   getExpertNetworkBootstrap,
   updateExpertNetworkReport,
 } from '../lib/api';
+import { DropdownLayout, getDropdownLayout } from '../lib/dropdown';
 
 type DomainRow = {
   id: string;
   domain: string;
   count: string;
+};
+
+type DomainOption = {
+  label: string;
+  keywords: string[];
 };
 
 type ExpertNetworkFormState = {
@@ -31,7 +37,29 @@ type ExpertNetworkFormState = {
   status: 'draft' | 'submitted';
 };
 
+function InfoIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <circle
+        cx="10"
+        cy="10"
+        r="7.2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M10 8v4.4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <circle cx="10" cy="5.9" r="1" fill="currentColor" />
+    </svg>
+  );
+}
+
 const DEFAULT_OWNER = '王天浩';
+const EXPERT_TABLE_PAGE_SIZE = 10;
 const DEFAULT_DOMAIN_OPTIONS = [
   '教育',
   '信息传输、软件和信息技术服务业',
@@ -49,6 +77,370 @@ const DEFAULT_DOMAIN_OPTIONS = [
   '采矿业',
   '水利、环境和公共设施管理业',
 ];
+
+const DOMAIN_PINYIN_KEYWORDS: Record<string, string[]> = {
+  农林牧渔业: ['nonglinmuyuye', 'nlmy'],
+  采矿业: ['caikuangye', 'cky'],
+  制造业: ['zhizaoye', 'zzy'],
+  建筑业: ['jianzhuye', 'jzy'],
+  批发和零售业: ['pifahelingshouye', 'pfhlsy'],
+  '交通运输、仓储和邮政业': [
+    'jiaotongyunshucangchuyouzhengye',
+    'jtysccyzy',
+  ],
+  '信息传输、软件和信息技术服务业': [
+    'xinxichuanshuruanjianhexinxijishufuwuye',
+    'xinxijishu',
+    'ruanjian',
+    'it',
+    'xxjs',
+  ],
+  金融业: ['jinrongye', 'jry'],
+  房地产业: ['fangdichanye', 'fdcy'],
+  科学研究和技术服务业: [
+    'kexueyanjiuhejishufuwuye',
+    'keyan',
+    'jishufuwu',
+    'kxyjjjsfwy',
+  ],
+  '水利、环境和公共设施管理业': [
+    'shuilihuanjinghegonggongsheshiguanliye',
+    'slhjhggssgly',
+  ],
+  教育: ['jiaoyu', 'jy'],
+  卫生和社会工作: ['weishengheshehuigongzuo', 'wshshgz'],
+  '文化、体育和娱乐业': ['wenhuatiyuheyuleye', 'whtyhyly'],
+  国际组织: ['guojizuzhi', 'gjzz'],
+  '电力、热力、燃气及水生产和供应业': [
+    'dianlireliranqijishuishengchanhegongyingye',
+    'dlrlrqjsschgyy',
+  ],
+  '居民服务、修理和其他服务业': [
+    'juminfuwuxiuliheqitafuwuye',
+    'jmfwxlhqtfwy',
+  ],
+  '公共管理、社会保障和社会组织': [
+    'gonggongguanlishehuibaozhangheshehuizuzhi',
+    'ggglshbzhshzz',
+  ],
+};
+
+const DOMAIN_PINYIN_CHAR_MAP: Record<string, string> = {
+  农: 'nong',
+  林: 'lin',
+  牧: 'mu',
+  渔: 'yu',
+  业: 'ye',
+  采: 'cai',
+  矿: 'kuang',
+  制: 'zhi',
+  造: 'zao',
+  建: 'jian',
+  筑: 'zhu',
+  批: 'pi',
+  发: 'fa',
+  和: 'he',
+  零: 'ling',
+  售: 'shou',
+  交: 'jiao',
+  通: 'tong',
+  运: 'yun',
+  输: 'shu',
+  仓: 'cang',
+  储: 'chu',
+  邮: 'you',
+  政: 'zheng',
+  信: 'xin',
+  息: 'xi',
+  软: 'ruan',
+  件: 'jian',
+  技: 'ji',
+  术: 'shu',
+  服: 'fu',
+  务: 'wu',
+  金: 'jin',
+  融: 'rong',
+  房: 'fang',
+  地: 'di',
+  产: 'chan',
+  科: 'ke',
+  学: 'xue',
+  研: 'yan',
+  究: 'jiu',
+  水: 'shui',
+  利: 'li',
+  环: 'huan',
+  境: 'jing',
+  公: 'gong',
+  共: 'gong',
+  设: 'she',
+  施: 'shi',
+  管: 'guan',
+  理: 'li',
+  教: 'jiao',
+  育: 'yu',
+  卫: 'wei',
+  生: 'sheng',
+  社: 'she',
+  会: 'hui',
+  工: 'gong',
+  作: 'zuo',
+  文: 'wen',
+  化: 'hua',
+  体: 'ti',
+  娱: 'yu',
+  乐: 'yue',
+  国: 'guo',
+  际: 'ji',
+  组: 'zu',
+  织: 'zhi',
+  电: 'dian',
+  力: 'li',
+  热: 're',
+  燃: 'ran',
+  气: 'qi',
+  及: 'ji',
+  供: 'gong',
+  应: 'ying',
+  居: 'ju',
+  民: 'min',
+  修: 'xiu',
+  其: 'qi',
+  他: 'ta',
+  保: 'bao',
+  障: 'zhang',
+  智: 'zhi',
+  能: 'neng',
+  汽: 'qi',
+  车: 'che',
+  医: 'yi',
+  药: 'yao',
+  旅: 'lv',
+  游: 'you',
+  传: 'chuan',
+  媒: 'mei',
+  商: 'shang',
+  品: 'pin',
+  法: 'fa',
+  律: 'lv',
+  咨: 'zi',
+  询: 'xun',
+  '、': '',
+  '，': '',
+  ',': '',
+  ' ': '',
+  '（': '',
+  '）': '',
+  '(': '',
+  ')': '',
+};
+
+type DomainComboInputProps = {
+  value: string;
+  options: DomainOption[];
+  placeholder: string;
+  ariaLabel: string;
+  onChange: (value: string) => void;
+  onCreateOption?: (value: string) => void;
+};
+
+function sanitizeSearchText(value: string) {
+  return value.toLowerCase().replace(/[、，,\s/（）()·-]/g, '');
+}
+
+function buildInitialKeyword(value: string) {
+  return Array.from(value)
+    .map((char) => {
+      const syllable = DOMAIN_PINYIN_CHAR_MAP[char];
+      return syllable ? syllable.charAt(0) : '';
+    })
+    .join('');
+}
+
+function buildPinyinKeyword(value: string) {
+  return Array.from(value)
+    .map((char) => DOMAIN_PINYIN_CHAR_MAP[char] ?? '')
+    .join('');
+}
+
+function buildDomainOptions(domains: string[]): DomainOption[] {
+  return Array.from(new Set(domains.map((item) => item.trim()).filter(Boolean)))
+    .sort((left, right) => left.localeCompare(right, 'zh-CN'))
+    .map((label) => ({
+      label,
+      keywords: Array.from(
+        new Set(
+          [
+            ...(DOMAIN_PINYIN_KEYWORDS[label] || []),
+            buildPinyinKeyword(label),
+            buildInitialKeyword(label),
+          ].filter(Boolean),
+        ),
+      ),
+    }));
+}
+
+function sortDomainCatalog(domains: string[]) {
+  return Array.from(new Set(domains.map((item) => item.trim()).filter(Boolean))).sort(
+    (left, right) => left.localeCompare(right, 'zh-CN'),
+  );
+}
+
+function DomainComboInput(props: DomainComboInputProps) {
+  const { value, options, placeholder, ariaLabel, onChange, onCreateOption } = props;
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [menuLayout, setMenuLayout] = useState<DropdownLayout>({
+    direction: 'down' as const,
+    maxHeight: 220,
+  });
+
+  const filteredOptions = useMemo(() => {
+    const keyword = sanitizeSearchText(value.trim());
+    if (!keyword) {
+      return options;
+    }
+
+    return options.filter((option) =>
+      [option.label, ...option.keywords].some((item) =>
+        sanitizeSearchText(item).includes(keyword),
+      ),
+    );
+  }, [options, value]);
+
+  const showCreateOption = useMemo(() => {
+    const nextValue = value.trim();
+    if (!onCreateOption || !nextValue) {
+      return false;
+    }
+
+    return !options.some((option) => option.label === nextValue);
+  }, [onCreateOption, options, value]);
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    function updateMenuLayout() {
+      setMenuLayout(getDropdownLayout(rootRef.current, inputRef.current, 220, 6));
+    }
+
+    const frameId = window.requestAnimationFrame(updateMenuLayout);
+
+    window.addEventListener('resize', updateMenuLayout);
+    document.addEventListener('scroll', updateMenuLayout, true);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener('resize', updateMenuLayout);
+      document.removeEventListener('scroll', updateMenuLayout, true);
+    };
+  }, [filteredOptions.length, open, showCreateOption]);
+
+  function handleSelect(nextValue: string) {
+    onChange(nextValue);
+    setOpen(false);
+  }
+
+  function handleCreate() {
+    const nextValue = value.trim();
+    if (!nextValue || !onCreateOption) {
+      return;
+    }
+
+    onCreateOption(nextValue);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={rootRef} className={`pm-combo ${open ? 'is-open' : ''}`}>
+      <div className="pm-combo__control">
+        <input
+          ref={inputRef}
+          value={value}
+          placeholder={placeholder}
+          aria-label={ariaLabel}
+          onFocus={() => setOpen(true)}
+          onChange={(event) => {
+            onChange(event.target.value);
+            setOpen(true);
+          }}
+        />
+        <button
+          type="button"
+          className="pm-combo__toggle"
+          aria-label={`${ariaLabel}下拉选项`}
+          onClick={() => setOpen((current) => !current)}
+        >
+          <span className="pm-combo__chevron" aria-hidden="true" />
+        </button>
+      </div>
+      {open ? (
+        <div
+          className="pm-combo__menu"
+          role="listbox"
+          aria-label={ariaLabel}
+          style={{
+            maxHeight: `${Math.max(menuLayout.maxHeight, 0)}px`,
+            top: menuLayout.direction === 'down' ? 'calc(100% + 6px)' : 'auto',
+            bottom: menuLayout.direction === 'up' ? 'calc(100% + 6px)' : 'auto',
+          }}
+        >
+          {filteredOptions.map((option) => (
+            <button
+              key={option.label}
+              type="button"
+              className={`pm-combo__option ${option.label === value ? 'is-selected' : ''}`}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                handleSelect(option.label);
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+          {showCreateOption ? (
+            <button
+              type="button"
+              className="pm-combo__option pm-combo__option--create"
+              onMouseDown={(event) => {
+                event.preventDefault();
+                handleCreate();
+              }}
+            >
+              新增行业字典值：{value.trim()}
+            </button>
+          ) : null}
+          {filteredOptions.length === 0 && !showCreateOption ? (
+            <div className="pm-combo__empty">无匹配项，可直接输入行业新值</div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function createRowId() {
   return globalThis.crypto?.randomUUID?.() || `row-${Math.random().toString(36).slice(2, 10)}`;
@@ -267,7 +659,10 @@ export function ExpertNetworkFormPage() {
     useState<ExpertNetworkWeeklyReport | null>(null);
   const [historyReports, setHistoryReports] = useState<ExpertNetworkWeeklyReport[]>([]);
   const [domainCatalog, setDomainCatalog] = useState<string[]>(DEFAULT_DOMAIN_OPTIONS);
+  const [domainDraft, setDomainDraft] = useState('');
   const [manualTotalAdjust, setManualTotalAdjust] = useState(false);
+  const [weeklyPage, setWeeklyPage] = useState(1);
+  const [totalPage, setTotalPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
 
@@ -284,6 +679,7 @@ export function ExpertNetworkFormPage() {
       setLatestReport(null);
       setHistoryReports([]);
       setDomainCatalog(DEFAULT_DOMAIN_OPTIONS);
+      setDomainDraft('');
       setManualTotalAdjust(false);
       setForm(emptyForm(targetWeek));
       setNotice('专家网络数据读取失败，已回退为空白草稿。');
@@ -299,6 +695,7 @@ export function ExpertNetworkFormPage() {
         ? bootstrap.domainCatalog
         : DEFAULT_DOMAIN_OPTIONS,
     );
+    setDomainDraft('');
     setLatestReport(bootstrap.latestReport);
     setBaselineReport(bootstrap.baselineReport);
 
@@ -346,11 +743,41 @@ export function ExpertNetworkFormPage() {
     () => aggregateRows(form.weeklyNewDomainDistribution),
     [form.weeklyNewDomainDistribution],
   );
+  const domainOptions = useMemo(
+    () => buildDomainOptions(domainCatalog),
+    [domainCatalog],
+  );
 
   const totalRows = useMemo(
     () => aggregateRows(form.totalDomainDistribution),
     [form.totalDomainDistribution],
   );
+  const weeklyPageCount = Math.max(
+    1,
+    Math.ceil(form.weeklyNewDomainDistribution.length / EXPERT_TABLE_PAGE_SIZE),
+  );
+  const totalPageCount = Math.max(
+    1,
+    Math.ceil(form.totalDomainDistribution.length / EXPERT_TABLE_PAGE_SIZE),
+  );
+  const weeklyPageStart = (weeklyPage - 1) * EXPERT_TABLE_PAGE_SIZE;
+  const totalPageStart = (totalPage - 1) * EXPERT_TABLE_PAGE_SIZE;
+  const visibleWeeklyRows = form.weeklyNewDomainDistribution.slice(
+    weeklyPageStart,
+    weeklyPageStart + EXPERT_TABLE_PAGE_SIZE,
+  );
+  const visibleTotalRows = form.totalDomainDistribution.slice(
+    totalPageStart,
+    totalPageStart + EXPERT_TABLE_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setWeeklyPage((current) => Math.min(current, weeklyPageCount));
+  }, [weeklyPageCount]);
+
+  useEffect(() => {
+    setTotalPage((current) => Math.min(current, totalPageCount));
+  }, [totalPageCount]);
 
   const completionItems = useMemo(
     () => [
@@ -397,6 +824,14 @@ export function ExpertNetworkFormPage() {
   );
 
   const completedCount = completionItems.filter((item) => item.done).length;
+  const expertContextTitle = `专家网络 · ${form.weekStart || selectedWeek}`;
+  const expertContextDetail = reportId
+    ? latestReport
+      ? `当前周报可直接编辑并再次提交。最近一期为 ${latestReport.weekStart}，默认沿用其累计领域口径，可在累计分布区调整。`
+      : '当前周报可直接编辑并再次提交。'
+    : latestReport
+      ? `当前为新建草稿。最近一期为 ${latestReport.weekStart}，默认沿用其累计领域口径，可在累计分布区调整。`
+      : '当前暂无历史周报，将从空白草稿开始录入。';
   const previousReport = baselineReport;
   const currentMetrics = {
     newExpertsCount: parseMetric(form.newExpertsCount),
@@ -452,13 +887,53 @@ export function ExpertNetworkFormPage() {
   }
 
   function addQuickDomain(domain: string) {
+    let added = false;
     updateRows('weeklyNewDomainDistribution', (rows) => {
       const exists = rows.some((row) => row.domain.trim() === domain);
       if (exists) {
         return rows;
       }
+      added = true;
       return [...rows, createEmptyRow(domain)];
     });
+    return added;
+  }
+
+  function addDomainToCatalog(domain: string) {
+    const normalized = domain.trim();
+    if (!normalized) {
+      return '';
+    }
+
+    setDomainCatalog((current) => sortDomainCatalog([...current, normalized]));
+    return normalized;
+  }
+
+  function handleAddDraftToWeekly() {
+    const normalized = addDomainToCatalog(domainDraft);
+    if (!normalized) {
+      setNotice('请先输入或选择一个行业。');
+      return;
+    }
+
+    const added = addQuickDomain(normalized);
+    setDomainDraft('');
+    setNotice(
+      added
+        ? `已将“${normalized}”加入本周新增领域分布。`
+        : `“${normalized}”已在本周新增领域分布中，无需重复添加。`,
+    );
+  }
+
+  function handleAddDraftToCatalog() {
+    const normalized = addDomainToCatalog(domainDraft);
+    if (!normalized) {
+      setNotice('请输入要加入字典的行业名称。');
+      return;
+    }
+
+    setDomainDraft(normalized);
+    setNotice(`已将“${normalized}”加入行业字典，可直接用于后续选择。`);
   }
 
   return (
@@ -472,64 +947,71 @@ export function ExpertNetworkFormPage() {
           </p>
         </div>
         <div className="pm-page-actions">
-          <button
-            type="button"
-            className="pm-btn pm-btn--light"
-            onClick={() => {
-              window.location.hash = '#/weekly-report';
-            }}
-          >
-            返回周汇报视图
-          </button>
-          <button
-            type="button"
-            className="pm-btn pm-btn--light"
-            onClick={() => {
-              const nextWeek = getCurrentWeekStart();
-              setSelectedWeek(nextWeek);
-            }}
-          >
-            新建本周草稿
-          </button>
-          <button
-            type="button"
-            className="pm-btn pm-btn--accent"
-            onClick={() => void handlePersist('draft')}
-            disabled={loading}
-          >
-            保存草稿
-          </button>
-          <button
-            type="button"
-            className="pm-btn pm-btn--primary"
-            onClick={() => void handlePersist('submitted')}
-            disabled={loading}
-          >
-            提交周报
-          </button>
+          <div className="pm-page-actions__group pm-page-actions__group--secondary">
+            <button
+              type="button"
+              className="pm-btn pm-btn--quiet"
+              onClick={() => {
+                window.location.hash = '#/weekly-report';
+              }}
+            >
+              返回周汇报
+            </button>
+          </div>
+          <div className="pm-page-actions__group pm-page-actions__group--primary">
+            <button
+              type="button"
+              className="pm-btn pm-btn--light"
+              onClick={() => {
+                const nextWeek = getCurrentWeekStart();
+                setSelectedWeek(nextWeek);
+              }}
+            >
+              新建草稿
+            </button>
+            <button
+              type="button"
+              className="pm-btn pm-btn--accent"
+              onClick={() => void handlePersist('draft')}
+              disabled={loading}
+            >
+              保存草稿
+            </button>
+            <button
+              type="button"
+              className="pm-btn pm-btn--primary"
+              onClick={() => void handlePersist('submitted')}
+              disabled={loading}
+            >
+              提交周报
+            </button>
+          </div>
         </div>
       </section>
 
       <section className="expert-context-bar">
-        <div className="expert-context-grid">
-          <label className="pm-field">
-            <span className="pm-field__label">统计周期</span>
-            <input
-              type="date"
-              value={selectedWeek}
-              onChange={(event) => setSelectedWeek(event.target.value)}
-            />
-          </label>
-          <div className="expert-context-note">
-            <span>当前状态</span>
-            <strong>{reportId ? '已存在周报，可直接编辑' : '当前为新建草稿'}</strong>
-            <small>
-              {latestReport
-                ? `最近一期为 ${latestReport.weekStart}，默认沿用其累计领域口径`
-                : '当前暂无历史周报，将从空白草稿开始录入'}
-            </small>
+        <div className="expert-workbench">
+          <div className="expert-workbench__period">
+            <label className="pm-field">
+              <span className="pm-field__label">统计周期</span>
+              <input
+                type="date"
+                value={selectedWeek}
+                onChange={(event) => setSelectedWeek(event.target.value)}
+              />
+            </label>
           </div>
-          <div className="expert-context-strip">
+          <div className="expert-workbench__summary">
+            <div className="expert-workbench__chips">
+              <span className={`pm-badge ${reportId ? 'pm-badge--ok' : ''}`}>
+                {reportId ? '已存在周报' : '新建草稿'}
+              </span>
+              <span className="pm-badge">完成 {completedCount}/{completionItems.length}</span>
+            </div>
+            <strong>{expertContextTitle}</strong>
+            <small>{expertContextDetail}</small>
+          </div>
+          <div className="expert-workbench__stats">
             <div>
               <span>完成度</span>
               <strong>
@@ -630,46 +1112,94 @@ export function ExpertNetworkFormPage() {
               <div>
                 <p className="pm-page-header__eyebrow">本周变化</p>
                 <h2>本周新增领域分布</h2>
-                <small>支持一项一项添加，后续看板会按领域分布展示，不落个人信息。</small>
+                <small>行业字段已改为可搜索下拉输入，支持中文、拼音全拼和首字母检索，也支持补充新行业字典值。</small>
               </div>
               <div className="pm-chip-row">
                 <span className="pm-chip">本周新增 {currentMetrics.newExpertsCount || 0}</span>
                 <span className="pm-chip">Top 领域 {topLabel(form.weeklyNewDomainDistribution)}</span>
               </div>
             </div>
-            <div className="expert-domain-chips">
-              {domainCatalog.slice(0, 12).map((domain) => (
+            <div className="expert-dictionary-bar">
+              <div className="expert-dictionary-field expert-dictionary-field--compact">
+                <div className="expert-dictionary-field__meta">
+                  <div className="expert-dictionary-field__title">
+                    <span className="pm-field__label">行业字典快速添加</span>
+                    <span className="expert-tip" tabIndex={0}>
+                      <span className="expert-tip__icon" aria-label="查看行业字典快速添加提示">
+                        <InfoIcon />
+                      </span>
+                      <span className="expert-tip__bubble" role="tooltip">
+                        当前字典 {domainCatalog.length} 个行业。支持中文、拼音全拼和首字母检索；
+                        若无匹配项，可直接输入新行业并加入字典。
+                      </span>
+                    </span>
+                  </div>
+                </div>
+                <div className="expert-dictionary-field__input">
+                  <DomainComboInput
+                    value={domainDraft}
+                    options={domainOptions}
+                    placeholder="搜索行业名称或拼音，如 教育 / jiaoyu / xxjs"
+                    ariaLabel="行业字典快速添加"
+                    onChange={setDomainDraft}
+                    onCreateOption={(nextValue) => {
+                      addDomainToCatalog(nextValue);
+                      setDomainDraft(nextValue);
+                    }}
+                  />
+                </div>
+              </div>
+              <div className="expert-dictionary-actions">
                 <button
-                  key={domain}
                   type="button"
-                  className="expert-domain-chip"
-                  onClick={() => addQuickDomain(domain)}
+                  className="pm-btn pm-btn--accent"
+                  onClick={handleAddDraftToWeekly}
                 >
-                  + {domain}
+                  添加到本周新增
                 </button>
-              ))}
+                <button
+                  type="button"
+                  className="pm-btn pm-btn--light"
+                  onClick={handleAddDraftToCatalog}
+                >
+                  加入行业字典
+                </button>
+              </div>
             </div>
             <div className="expert-table">
               <div className="expert-table__head">
+                <span>序号</span>
                 <span>领域</span>
                 <span>人数</span>
                 <span>操作</span>
               </div>
-              {form.weeklyNewDomainDistribution.map((row, index) => (
+              {visibleWeeklyRows.map((row, index) => (
                 <div key={row.id} className="expert-table__row">
-                  <div className="expert-table__index">{index + 1}</div>
-                  <input
+                  <div className="expert-table__index">{weeklyPageStart + index + 1}</div>
+                  <DomainComboInput
                     value={row.domain}
-                    onChange={(event) =>
+                    options={domainOptions}
+                    placeholder="搜索或输入行业名称"
+                    ariaLabel={`本周新增领域第${weeklyPageStart + index + 1}行`}
+                    onChange={(nextValue) =>
                       updateRows('weeklyNewDomainDistribution', (rows) =>
                         rows.map((item) =>
                           item.id === row.id
-                            ? { ...item, domain: event.target.value }
+                            ? { ...item, domain: nextValue }
                             : item,
                         ),
                       )
                     }
-                    placeholder="输入领域名称"
+                    onCreateOption={(nextValue) => {
+                      addDomainToCatalog(nextValue);
+                      updateRows('weeklyNewDomainDistribution', (rows) =>
+                        rows.map((item) =>
+                          item.id === row.id
+                            ? { ...item, domain: nextValue }
+                            : item,
+                        ),
+                      );
+                    }}
                   />
                   <input
                     value={row.count}
@@ -704,16 +1234,48 @@ export function ExpertNetworkFormPage() {
                 </div>
               ))}
             </div>
+            {weeklyPageCount > 1 ? (
+              <div className="pm-pagination expert-table__pagination">
+                <span className="pm-pagination__info">
+                  第 {weeklyPage} / {weeklyPageCount} 页，每页最多 {EXPERT_TABLE_PAGE_SIZE} 条
+                </span>
+                <div className="pm-pagination__actions">
+                  <button
+                    type="button"
+                    className="pm-btn pm-btn--light"
+                    onClick={() => setWeeklyPage((current) => Math.max(1, current - 1))}
+                    disabled={weeklyPage <= 1}
+                  >
+                    上一页
+                  </button>
+                  <button
+                    type="button"
+                    className="pm-btn pm-btn--light"
+                    onClick={() =>
+                      setWeeklyPage((current) => Math.min(weeklyPageCount, current + 1))
+                    }
+                    disabled={weeklyPage >= weeklyPageCount}
+                  >
+                    下一页
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <div className="expert-panel__actions">
               <button
                 type="button"
                 className="pm-btn pm-btn--light"
-                onClick={() =>
+                onClick={() => {
+                  setWeeklyPage(
+                    Math.ceil(
+                      (form.weeklyNewDomainDistribution.length + 1) / EXPERT_TABLE_PAGE_SIZE,
+                    ),
+                  );
                   updateRows('weeklyNewDomainDistribution', (rows) => [
                     ...rows,
                     createEmptyRow(),
-                  ])
-                }
+                  ]);
+                }}
               >
                 新增领域行
               </button>
@@ -747,25 +1309,38 @@ export function ExpertNetworkFormPage() {
             </div>
             <div className="expert-table">
               <div className="expert-table__head">
+                <span>序号</span>
                 <span>领域</span>
                 <span>累计人数</span>
                 <span>操作</span>
               </div>
-              {form.totalDomainDistribution.map((row, index) => (
+              {visibleTotalRows.map((row, index) => (
                 <div key={row.id} className="expert-table__row">
-                  <div className="expert-table__index">{index + 1}</div>
-                  <input
+                  <div className="expert-table__index">{totalPageStart + index + 1}</div>
+                  <DomainComboInput
                     value={row.domain}
-                    onChange={(event) =>
+                    options={domainOptions}
+                    placeholder="搜索或输入行业名称"
+                    ariaLabel={`累计领域第${totalPageStart + index + 1}行`}
+                    onChange={(nextValue) =>
                       updateRows('totalDomainDistribution', (rows) =>
                         rows.map((item) =>
                           item.id === row.id
-                            ? { ...item, domain: event.target.value }
+                            ? { ...item, domain: nextValue }
                             : item,
                         ),
                       )
                     }
-                    placeholder="输入领域名称"
+                    onCreateOption={(nextValue) => {
+                      addDomainToCatalog(nextValue);
+                      updateRows('totalDomainDistribution', (rows) =>
+                        rows.map((item) =>
+                          item.id === row.id
+                            ? { ...item, domain: nextValue }
+                            : item,
+                        ),
+                      );
+                    }}
                   />
                   <input
                     value={row.count}
@@ -800,16 +1375,48 @@ export function ExpertNetworkFormPage() {
                 </div>
               ))}
             </div>
+            {totalPageCount > 1 ? (
+              <div className="pm-pagination expert-table__pagination">
+                <span className="pm-pagination__info">
+                  第 {totalPage} / {totalPageCount} 页，每页最多 {EXPERT_TABLE_PAGE_SIZE} 条
+                </span>
+                <div className="pm-pagination__actions">
+                  <button
+                    type="button"
+                    className="pm-btn pm-btn--light"
+                    onClick={() => setTotalPage((current) => Math.max(1, current - 1))}
+                    disabled={totalPage <= 1}
+                  >
+                    上一页
+                  </button>
+                  <button
+                    type="button"
+                    className="pm-btn pm-btn--light"
+                    onClick={() =>
+                      setTotalPage((current) => Math.min(totalPageCount, current + 1))
+                    }
+                    disabled={totalPage >= totalPageCount}
+                  >
+                    下一页
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <div className="expert-panel__actions">
               <button
                 type="button"
                 className="pm-btn pm-btn--light"
-                onClick={() =>
+                onClick={() => {
+                  setTotalPage(
+                    Math.ceil(
+                      (form.totalDomainDistribution.length + 1) / EXPERT_TABLE_PAGE_SIZE,
+                    ),
+                  );
                   updateRows('totalDomainDistribution', (rows) => [
                     ...rows,
                     createEmptyRow(),
-                  ])
-                }
+                  ]);
+                }}
               >
                 新增累计行
               </button>

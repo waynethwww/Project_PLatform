@@ -4,6 +4,7 @@ import ReactECharts from 'echarts-for-react';
 import { AppSelect } from '../components/AppSelect';
 import {
   DashboardFilters,
+  ExpertDomainDistributionItem,
   ExpertNetworkDashboardData,
   getExpertNetworkDashboard,
   getAlgoTrend,
@@ -239,6 +240,75 @@ function compactProjectName(name: string, max = 12) {
   }
 
   return `${name.slice(0, max)}…`;
+}
+
+function getExpertDomainChartHeight(rowCount: number, minHeight = 180) {
+  if (rowCount <= 0) {
+    return minHeight;
+  }
+
+  return Math.max(minHeight, rowCount * 34 + 54);
+}
+
+function buildExpertDomainBarOption(
+  rows: ExpertDomainDistributionItem[],
+  color: string,
+) {
+  return {
+    animationDuration: 320,
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params: any) => {
+        const first = Array.isArray(params) ? params[0] : params;
+        if (!first) {
+          return '';
+        }
+        return `${first.name}<br/>人数：<b>${first.value}</b>`;
+      },
+    },
+    grid: { top: 12, left: 18, right: 28, bottom: 10, containLabel: true },
+    xAxis: {
+      type: 'value',
+      axisLabel: { color: '#5A6780', fontSize: 11 },
+      axisTick: { show: false },
+      axisLine: { show: false },
+      splitLine: { lineStyle: { color: 'rgba(15,38,70,.06)' } },
+    },
+    yAxis: {
+      type: 'category',
+      inverse: true,
+      data: rows.map((row) => row.domain),
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: {
+        color: '#334155',
+        fontSize: 12,
+        width: 132,
+        overflow: 'truncate',
+        margin: 12,
+        formatter: (value: string) => compactProjectName(value, 14),
+      },
+    },
+    series: [
+      {
+        type: 'bar',
+        barWidth: 18,
+        data: rows.map((row) => row.count),
+        label: {
+          show: true,
+          position: 'right',
+          color: '#44546A',
+          fontSize: 11,
+          fontWeight: 700,
+        },
+        itemStyle: {
+          color,
+          borderRadius: [0, 5, 5, 0],
+        },
+      },
+    ],
+  };
 }
 
 function formatSignedDelta(value: number, previous: number | null) {
@@ -1206,6 +1276,10 @@ export function DashboardPage() {
       ),
     [expertDashboard.totalDomainDistribution],
   );
+  const expertTotalDomainRows = useMemo(
+    () => expertTotalDomains.slice(0, 10),
+    [expertTotalDomains],
+  );
   const expertWeeklyDomains = useMemo(
     () =>
       [...expertDashboard.weeklyNewDomainDistribution].sort(
@@ -1215,8 +1289,20 @@ export function DashboardPage() {
       ),
     [expertDashboard.weeklyNewDomainDistribution],
   );
+  const expertWeeklyDomainRows = useMemo(
+    () => expertWeeklyDomains.slice(0, 10),
+    [expertWeeklyDomains],
+  );
   const expertTopTotalDomain = expertTotalDomains[0] || null;
   const expertTopWeeklyDomain = expertWeeklyDomains[0] || null;
+  const expertTotalDomainHeight = useMemo(
+    () => getExpertDomainChartHeight(expertTotalDomainRows.length, 300),
+    [expertTotalDomainRows.length],
+  );
+  const expertWeeklyDomainHeight = useMemo(
+    () => getExpertDomainChartHeight(expertWeeklyDomainRows.length, 170),
+    [expertWeeklyDomainRows.length],
+  );
 
   const expertKpis = useMemo(
     () =>
@@ -1321,69 +1407,123 @@ export function DashboardPage() {
   );
 
   const expertTotalDomainOption = useMemo(
-    () => ({
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-      grid: { top: 18, left: 148, right: 24, bottom: 18 },
-      xAxis: {
-        type: 'value',
-        axisLabel: { color: '#38385E' },
-        splitLine: { lineStyle: { color: 'rgba(0,0,0,.05)' } },
-      },
-      yAxis: {
-        type: 'category',
-        inverse: true,
-        data: expertTotalDomains
-          .slice(0, 10)
-          .map((row) => compactProjectName(row.domain, 18)),
-        axisLabel: { color: '#38385E' },
-        axisLine: { lineStyle: { color: '#BCC4DF' } },
-      },
-      series: [
-        {
-          type: 'bar',
-          barMaxWidth: 18,
-          data: expertTotalDomains.slice(0, 10).map((row) => row.count),
-          itemStyle: {
-            color: 'rgba(21,96,184,.76)',
-            borderRadius: [0, 4, 4, 0],
-          },
-        },
-      ],
-    }),
-    [expertTotalDomains],
+    () => buildExpertDomainBarOption(expertTotalDomainRows, 'rgba(21,96,184,.78)'),
+    [expertTotalDomainRows],
   );
 
   const expertWeeklyDomainOption = useMemo(
-    () => ({
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-      grid: { top: 18, left: 148, right: 24, bottom: 18 },
-      xAxis: {
-        type: 'value',
-        axisLabel: { color: '#38385E' },
-        splitLine: { lineStyle: { color: 'rgba(0,0,0,.05)' } },
-      },
-      yAxis: {
-        type: 'category',
-        inverse: true,
-        data: expertWeeklyDomains
-          .slice(0, 10)
-          .map((row) => compactProjectName(row.domain, 18)),
-        axisLabel: { color: '#38385E' },
-        axisLine: { lineStyle: { color: '#BCC4DF' } },
-      },
-      series: [
-        {
-          type: 'bar',
-          barMaxWidth: 18,
-          data: expertWeeklyDomains.slice(0, 10).map((row) => row.count),
-          itemStyle: {
-            color: 'rgba(10,107,92,.76)',
-            borderRadius: [0, 4, 4, 0],
-          },
-        },
-      ],
-    }),
-    [expertWeeklyDomains],
+    () => buildExpertDomainBarOption(expertWeeklyDomainRows, 'rgba(10,107,92,.78)'),
+    [expertWeeklyDomainRows],
+  );
+
+  const expertSection = (
+    <section className="wr-sec">
+      <div className="wr-sec__hdr wr-sec__hdr--expert">
+        <h2>🧠 ⑦ 专家网络运营专项</h2>
+        <span className="wr-badge">独立模块 · 仅受时间筛选影响 · 不展示个人信息</span>
+      </div>
+      <div className="wr-sec__body">
+        {expertLatestReport ? (
+          <>
+            <div className="wr-kpi-row wr-kpi-row--expert">
+              {expertKpis.map((kpi) => (
+                <article key={kpi.label} className="wr-kpi">
+                  <div className="wr-kpi__label" style={{ background: kpi.color }}>
+                    {kpi.label}
+                  </div>
+                  <div className="wr-kpi__value" style={{ color: kpi.color }}>
+                    {kpi.value}
+                  </div>
+                  <div className="wr-kpi__sub">{kpi.subtext}</div>
+                </article>
+              ))}
+            </div>
+
+            <div className="wr-grid wr-grid--2 wr-grid--expert-overview">
+              <article className="wr-expert-trend-card">
+                <div className="wr-chart-title wr-chart-title--expert">周度趋势</div>
+                <div className="wr-chart wr-chart--260 wr-chart--expert-trend">
+                  <ReactECharts option={expertTrendOption} style={{ height: '100%' }} />
+                </div>
+                <div className="wr-note wr-note--green">
+                  当前最新统计周为 <b>{expertLatestReport.weekStart}</b>，新增专家{' '}
+                  <b>{expertLatestReport.newExpertsCount}</b> 人，提交 case{' '}
+                  <b>{expertLatestReport.weeklySubmittedCases}</b> 条。
+                </div>
+              </article>
+              <article className="wr-expert-brief">
+                <div className="wr-chart-title wr-chart-title--expert">本周经营摘要</div>
+                <div className="wr-expert-brief__meta">
+                  <span>数据更新人：{expertLatestReport.ownerName}</span>
+                  <span>累计覆盖领域：{expertTotalDomains.length} 个</span>
+                  <span>本周新增领域：{expertWeeklyDomains.length} 个</span>
+                </div>
+                <div className="wr-expert-brief__text">
+                  <strong>摘要</strong>
+                  <p>{expertLatestReport.summary || '本周暂无摘要。'}</p>
+                  <strong>下周重点</strong>
+                  <p>{expertLatestReport.nextWeekFocus || '本周未填写下周重点。'}</p>
+                </div>
+                <div className="wr-expert-pills">
+                  <span className="wr-tag wr-tag--blue">
+                    累计 Top 领域：{expertTopTotalDomain?.domain || '暂无'}
+                    {expertTopTotalDomain ? ` ${expertTopTotalDomain.count}` : ''}
+                  </span>
+                  <span className="wr-tag wr-tag--green">
+                    本周新增 Top 领域：{expertTopWeeklyDomain?.domain || '暂无'}
+                    {expertTopWeeklyDomain ? ` ${expertTopWeeklyDomain.count}` : ''}
+                  </span>
+                </div>
+                <div className="wr-note wr-note--amber">
+                  当前模块按聚合口径汇报，只关注新增专家、活跃专家、case 产出和领域覆盖，不展示个人名单与履历。
+                </div>
+              </article>
+            </div>
+
+            <div className="wr-grid wr-grid--2 wr-grid--expert-bars">
+              <article className="wr-expert-chart-card wr-expert-chart-card--wide">
+                <div className="wr-chart-title wr-chart-title--expert">
+                  总计专家领域分布（Top 10）
+                </div>
+                {expertTotalDomainRows.length > 0 ? (
+                  <div
+                    className="wr-chart wr-chart--expert-domain"
+                    style={{ height: `${expertTotalDomainHeight}px` }}
+                  >
+                    <ReactECharts
+                      option={expertTotalDomainOption}
+                      style={{ height: '100%', width: '100%' }}
+                    />
+                  </div>
+                ) : (
+                  <div className="wr-empty">当前暂无累计领域分布数据。</div>
+                )}
+              </article>
+              <article className="wr-expert-chart-card">
+                <div className="wr-chart-title wr-chart-title--expert">
+                  本周新增专家领域分布（Top 10）
+                </div>
+                {expertWeeklyDomainRows.length > 0 ? (
+                  <div
+                    className="wr-chart wr-chart--expert-domain"
+                    style={{ height: `${expertWeeklyDomainHeight}px` }}
+                  >
+                    <ReactECharts
+                      option={expertWeeklyDomainOption}
+                      style={{ height: '100%', width: '100%' }}
+                    />
+                  </div>
+                ) : (
+                  <div className="wr-empty">当前时间范围暂无本周新增领域数据。</div>
+                )}
+              </article>
+            </div>
+          </>
+        ) : (
+          <div className="wr-empty">当前暂无专家网络运营数据，请先在“专家网络填报”页录入。</div>
+        )}
+      </div>
+    </section>
   );
 
   async function handleDingtalkLogin() {
@@ -1940,9 +2080,11 @@ export function DashboardPage() {
         </div>
       </section>
 
+      {expertSection}
+
       <section className="wr-sec">
         <div className="wr-sec__hdr wr-sec__hdr--summary">
-          <h2>📋 ⑦ 综合结论 · 管理层决策建议</h2>
+          <h2>📋 ⑧ 综合结论 · 管理层决策建议</h2>
         </div>
         <div className="wr-sec__body">
           <div className="wr-summary-grid">
@@ -1962,7 +2104,7 @@ export function DashboardPage() {
 
       <section className="wr-sec">
         <div className="wr-sec__hdr wr-sec__hdr--pm">
-          <h2>👤 ⑧ 人员管理专项 · 一曲线交付分布 & 全员负载分析</h2>
+          <h2>👤 ⑨ 人员管理专项 · 一曲线交付分布 & 全员负载分析</h2>
           <span className="wr-badge">统计周：{filters.endDate}</span>
         </div>
         <div className="wr-sec__body">
@@ -2059,100 +2201,6 @@ export function DashboardPage() {
               </article>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section className="wr-sec">
-        <div className="wr-sec__hdr wr-sec__hdr--expert">
-          <h2>🧠 ⑨ 专家网络运营专项</h2>
-          <span className="wr-badge">独立模块 · 仅受时间筛选影响 · 不展示个人信息</span>
-        </div>
-        <div className="wr-sec__body">
-          {expertLatestReport ? (
-            <>
-              <div className="wr-kpi-row">
-                {expertKpis.map((kpi) => (
-                  <article key={kpi.label} className="wr-kpi">
-                    <div className="wr-kpi__label" style={{ background: kpi.color }}>
-                      {kpi.label}
-                    </div>
-                    <div className="wr-kpi__value" style={{ color: kpi.color }}>
-                      {kpi.value}
-                    </div>
-                    <div className="wr-kpi__sub">{kpi.subtext}</div>
-                  </article>
-                ))}
-              </div>
-
-              <div className="wr-grid wr-grid--2">
-                <div>
-                  <div className="wr-chart-title wr-chart-title--expert">周度趋势</div>
-                  <div className="wr-chart wr-chart--260">
-                    <ReactECharts option={expertTrendOption} style={{ height: '100%' }} />
-                  </div>
-                  <div className="wr-note wr-note--green">
-                    当前最新统计周为 <b>{expertLatestReport.weekStart}</b>，新增专家{' '}
-                    <b>{expertLatestReport.newExpertsCount}</b> 人，提交 case{' '}
-                    <b>{expertLatestReport.weeklySubmittedCases}</b> 条。
-                  </div>
-                </div>
-                <article className="wr-expert-brief">
-                  <div className="wr-chart-title wr-chart-title--expert">本周经营摘要</div>
-                  <div className="wr-expert-brief__meta">
-                    <span>数据更新人：{expertLatestReport.ownerName}</span>
-                    <span>累计覆盖领域：{expertTotalDomains.length} 个</span>
-                    <span>本周新增领域：{expertWeeklyDomains.length} 个</span>
-                  </div>
-                  <div className="wr-expert-brief__text">
-                    <strong>摘要</strong>
-                    <p>{expertLatestReport.summary || '本周暂无摘要。'}</p>
-                    <strong>下周重点</strong>
-                    <p>{expertLatestReport.nextWeekFocus || '本周未填写下周重点。'}</p>
-                  </div>
-                  <div className="wr-expert-pills">
-                    <span className="wr-tag wr-tag--blue">
-                      累计 Top 领域：{expertTopTotalDomain?.domain || '暂无'}
-                      {expertTopTotalDomain ? ` ${expertTopTotalDomain.count}` : ''}
-                    </span>
-                    <span className="wr-tag wr-tag--green">
-                      本周新增 Top 领域：{expertTopWeeklyDomain?.domain || '暂无'}
-                      {expertTopWeeklyDomain ? ` ${expertTopWeeklyDomain.count}` : ''}
-                    </span>
-                  </div>
-                  <div className="wr-note wr-note--amber">
-                    当前模块按聚合口径汇报，只关注新增专家、活跃专家、case 产出和领域覆盖，不展示个人名单与履历。
-                  </div>
-                </article>
-              </div>
-
-              <div className="wr-grid wr-grid--2">
-                <div>
-                  <div className="wr-chart-title wr-chart-title--expert">
-                    总计专家领域分布（Top 10）
-                  </div>
-                  <div className="wr-chart wr-chart--260">
-                    <ReactECharts
-                      option={expertTotalDomainOption}
-                      style={{ height: '100%' }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <div className="wr-chart-title wr-chart-title--expert">
-                    本周新增专家领域分布（Top 10）
-                  </div>
-                  <div className="wr-chart wr-chart--260">
-                    <ReactECharts
-                      option={expertWeeklyDomainOption}
-                      style={{ height: '100%' }}
-                    />
-                  </div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="wr-empty">当前暂无专家网络运营数据，请先在“专家网络填报”页录入。</div>
-          )}
         </div>
       </section>
 
