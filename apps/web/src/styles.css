@@ -3852,8 +3852,8 @@ textarea {
 }
 
 .pm-field--search-slim {
-  flex: 0 1 300px;
-  max-width: 300px;
+  flex: 0 1 420px;
+  max-width: 420px;
 }
 
 .pm-field--filter {
@@ -3861,7 +3861,7 @@ textarea {
 }
 
 .pm-field--filter-slim {
-  flex: 0 0 150px;
+  flex: 0 0 160px;
 }
 
 .pm-manager-list {
@@ -3889,17 +3889,37 @@ textarea {
   flex-wrap: wrap;
 }
 
-.pm-project-list-stats,
 .pm-project-list-tools {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) 160px 160px;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
 }
 
 .pm-project-list-tools {
-  flex: 1 1 360px;
+  flex: 1 1 760px;
   justify-content: flex-end;
+}
+
+.pm-project-list-tools .pm-field--search-slim,
+.pm-project-list-tools .pm-field--filter-slim {
+  max-width: none;
+}
+
+.pm-project-list-tools .pm-field input,
+.pm-project-list-tools .app-select__trigger {
+  min-height: 46px;
+  border-color: #d4e0f1;
+  border-radius: 14px;
+  background: #ffffff;
+  color: var(--platform-text);
+  font-size: 15px;
+}
+
+.pm-project-list-tools .pm-field input:hover,
+.pm-project-list-tools .app-select__trigger:hover {
+  border-color: #bcd0ee;
+  background: #ffffff;
 }
 
 .pm-project-list {
@@ -4356,6 +4376,11 @@ textarea {
   .pm-page-header--list .pm-page-actions,
   .pm-project-list-tools {
     justify-content: flex-start;
+  }
+
+  .pm-project-list-tools {
+    grid-template-columns: 1fr;
+    width: 100%;
   }
 
   .pm-workbench,

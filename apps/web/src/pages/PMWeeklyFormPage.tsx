@@ -40,6 +40,7 @@ type ComboInputProps = {
   }>;
   placeholder?: string;
   ariaLabel?: string;
+  maxMenuHeight?: number;
   onChange: (value: string) => void;
 };
 
@@ -54,6 +55,10 @@ const CURVE_FILTER_OPTIONS = [
   { value: '一曲线', label: '一曲线' },
   { value: '二曲线', label: '二曲线' },
   { value: '三曲线', label: '三曲线' },
+];
+const PROJECT_LIST_CURVE_FILTER_OPTIONS = [
+  { value: '', label: '曲线类型' },
+  ...CURVE_FILTER_OPTIONS.slice(1),
 ];
 const REPORT_STATUS_FILTER_OPTIONS = [
   { value: '', label: '全部状态' },
@@ -142,10 +147,12 @@ const PROJECT_NAME_KEYWORD_RULES = [
 
 const ANNOTATION_TYPE_OPTIONS = [
   { label: '点云分割', keywords: ['dianyunfenge', 'dyfg', 'dianyun', 'fenge', 'pointcloud'] },
+  { label: '语义分割', keywords: ['yuyifenge', 'yyfg', 'yuyi', 'fenge', 'segmentation'] },
   { label: '2D框', keywords: ['2d', '2dkuang', 'erweikuang', 'ewk'] },
   { label: '3D框', keywords: ['3d', '3dkuang', 'sanweikuang', 'swk'] },
-  { label: '23D融合', keywords: ['23d', '23dronghe', 'ronghe', 'rh'] },
+  { label: '2D/3D融合', keywords: ['2d3d', '23d', '2d/3d', 'ronghe', 'rh'] },
   { label: '4D车道线', keywords: ['4d', '4dchedaoxian', 'cdx', 'chedao', 'xian'] },
+  { label: '车道线', keywords: ['chedaoxian', 'cdx', 'chedao', 'xian'] },
   { label: '分类', keywords: ['fenlei', 'fl'] },
   { label: '视频', keywords: ['shipin', 'sp'] },
   { label: '语音', keywords: ['yuyin', 'yy'] },
@@ -826,13 +833,13 @@ function NumericInput(props: NumericInputProps) {
 }
 
 function ComboInput(props: ComboInputProps) {
-  const { value, options, placeholder, ariaLabel, onChange } = props;
+  const { value, options, placeholder, ariaLabel, maxMenuHeight = 220, onChange } = props;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
   const [menuLayout, setMenuLayout] = useState<DropdownLayout>({
     direction: 'down' as const,
-    maxHeight: 220,
+    maxHeight: maxMenuHeight,
   });
 
   const filteredOptions = useMemo(() => {
@@ -876,7 +883,7 @@ function ComboInput(props: ComboInputProps) {
     }
 
     function updateMenuLayout() {
-      setMenuLayout(getDropdownLayout(rootRef.current, inputRef.current, 220, 6));
+      setMenuLayout(getDropdownLayout(rootRef.current, inputRef.current, maxMenuHeight, 6));
     }
 
     const frameId = window.requestAnimationFrame(updateMenuLayout);
@@ -888,7 +895,7 @@ function ComboInput(props: ComboInputProps) {
       window.removeEventListener('resize', updateMenuLayout);
       document.removeEventListener('scroll', updateMenuLayout, true);
     };
-  }, [filteredOptions.length, open]);
+  }, [filteredOptions.length, maxMenuHeight, open]);
 
   function handleSelect(nextValue: string) {
     onChange(nextValue);
@@ -1022,6 +1029,7 @@ export function PMWeeklyFormPage() {
   const [reportPage, setReportPage] = useState(1);
   const [projectListKeyword, setProjectListKeyword] = useState('');
   const [projectListPmFilter, setProjectListPmFilter] = useState('');
+  const [projectListCurveFilter, setProjectListCurveFilter] = useState('');
   const [projectListPage, setProjectListPage] = useState(1);
   const projectMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -1101,7 +1109,7 @@ export function PMWeeklyFormPage() {
     ).sort((left, right) => left.localeCompare(right, 'zh-CN'));
 
     return [
-      { value: '', label: '全部项目经理' },
+      { value: '', label: '项目经理' },
       ...managers.map((manager) => ({ value: manager, label: manager })),
     ];
   }, [activeProjects]);
@@ -1112,6 +1120,7 @@ export function PMWeeklyFormPage() {
         .filter(
           (project) =>
             (!projectListPmFilter || project.pmName === projectListPmFilter) &&
+            (!projectListCurveFilter || project.curveType === projectListCurveFilter) &&
             matchesSearchKeyword(projectListKeyword, buildProjectSearchKeywords(project)),
         )
         .sort((left, right) => {
@@ -1132,7 +1141,13 @@ export function PMWeeklyFormPage() {
 
           return left.name.localeCompare(right.name, 'zh-CN');
         }),
-    [activeProjects, latestReportByProject, projectListKeyword, projectListPmFilter],
+    [
+      activeProjects,
+      latestReportByProject,
+      projectListCurveFilter,
+      projectListKeyword,
+      projectListPmFilter,
+    ],
   );
 
   const archivedPagination = useMemo(
@@ -1277,7 +1292,7 @@ export function PMWeeklyFormPage() {
 
   useEffect(() => {
     setProjectListPage(1);
-  }, [projectListKeyword, projectListPmFilter]);
+  }, [projectListCurveFilter, projectListKeyword, projectListPmFilter]);
 
   useEffect(() => {
     setForm((current) => normalizeFormByCurveType(selectedProject, current));
@@ -1367,19 +1382,6 @@ export function PMWeeklyFormPage() {
 
     return { text: '在控', tone: 'ok' as const };
   }, [costRate, form.qualityPass, primaryRisk.level]);
-
-  const projectListStats = useMemo(
-    () => ({
-      activeCount: activeProjects.length,
-      draftCount: activeProjects.filter(
-        (project) => latestReportByProject.get(project.id)?.status === 'draft',
-      ).length,
-      submittedCount: activeProjects.filter(
-        (project) => latestReportByProject.get(project.id)?.status === 'submitted',
-      ).length,
-    }),
-    [activeProjects, latestReportByProject],
-  );
 
   const completionChecks = useMemo(
     () => [
@@ -2075,11 +2077,6 @@ export function PMWeeklyFormPage() {
             <div className="pm-panel__header pm-panel__header--project-list">
               <div className="pm-project-list-heading">
                 <h2>项目菜单</h2>
-                <div className="pm-project-list-stats">
-                  <span className="pm-badge pm-badge--ok">活跃 {projectListStats.activeCount}</span>
-                  <span className="pm-badge pm-badge--warn">草稿 {projectListStats.draftCount}</span>
-                  <span className="pm-badge">已提交 {projectListStats.submittedCount}</span>
-                </div>
               </div>
               <div className="pm-project-list-tools">
                 <label className="pm-field pm-field--search pm-field--search-slim">
@@ -2097,6 +2094,15 @@ export function PMWeeklyFormPage() {
                     ariaLabel="项目经理筛选"
                     size="compact"
                     options={projectManagerFilterOptions}
+                  />
+                </label>
+                <label className="pm-field pm-field--filter pm-field--filter-slim">
+                  <AppSelect
+                    value={projectListCurveFilter}
+                    onChange={setProjectListCurveFilter}
+                    ariaLabel="曲线类型筛选"
+                    size="compact"
+                    options={PROJECT_LIST_CURVE_FILTER_OPTIONS}
                   />
                 </label>
               </div>
@@ -2133,17 +2139,8 @@ export function PMWeeklyFormPage() {
                           </span>
                         </span>
                         <span className="pm-project-entry__meta">
-                          <span>编号 {project.id}</span>
                           <span>项目经理 {project.pmName || '待分配'}</span>
                           <span>{project.curveType || '未配置曲线'}</span>
-                        </span>
-                        <span className="pm-project-entry__sub">
-                          <span>
-                            最近周期 {latestReport ? latestReport.weekStart : '暂无记录'}
-                          </span>
-                          <span>
-                            最近更新 {latestReport ? formatDateTime(latestReport.updatedAt) : '尚未保存'}
-                          </span>
                         </span>
                       </span>
                       <span className="pm-project-entry__cta">进入填报</span>
@@ -2892,6 +2889,7 @@ export function PMWeeklyFormPage() {
                       options={ANNOTATION_TYPE_OPTIONS}
                       placeholder="可输入或选择标注类型"
                       ariaLabel="标注类型"
+                      maxMenuHeight={168}
                       onChange={(value) => updateProjectField('annotationType', value)}
                     />
                   </label>
